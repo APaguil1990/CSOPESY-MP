@@ -1,29 +1,42 @@
-#include <iostream>
-#include <string>
-#include <windows.h>
-#include <conio.h>    
-#include <sstream>    
-#include <algorithm>  
-#include <iterator>
+#include <iostream> 
+#include <string> 
+#include <windows.h> 
+#include <conio.h> 
+#include <sstream> 
+#include <algorithm> 
+#include <iterator> 
 
-using namespace std;
+using namespace std; 
 
-// --- Globals ---
-const int RESERVED_LINES = 3;
-string text = "Hello World, I am a Marquee Text";
-int sleepDuration = 50;
-int x = 0, y = 0;           
-int dx = 1, dy = 1;     
-DWORD lastUpdateTime = 0;     // Track animation timing 
-COORD prevMarqueePos = {5, 5};
+// Global variables 
+const int RESERVED_LINES = 3; 
+const int START_Y = 2; 
+string text = "Hello World, I am a Marquee Text"; 
+int sleepDuration = 50; 
+int x = 0, y = START_Y; 
+int dx = 1, dy = 1; 
+DWORD lastUpdateTime = 0; 
+COORD prevMarqueePos = {0, static_cast<SHORT>(START_Y)}; 
+HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
 
-// --- Function to clear text at position ---
+// Clear screen 
+void clearScreen() {
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+
+    COORD topLeft = {0, 0}; 
+    DWORD written; 
+    FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X * csbi.dwSize.Y, topLeft, &written); 
+    SetConsoleCursorPosition(hConsole, topLeft); 
+} 
+
+// Clear position 
 void clearPosition(COORD pos, int length) {
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-    cout << string(length, ' ');
-}
+    SetConsoleCursorPosition(hConsole, pos); 
+    cout << string(length, ' ') << flush; 
+} 
 
-// --- Process Commands ---
+// Process commands 
 void processCommand(const string& cmd, string& outputMsg) {
     istringstream iss(cmd);
     string action;
@@ -66,88 +79,97 @@ void processCommand(const string& cmd, string& outputMsg) {
     }
 }
 
-// --- Main ---
-int main() {
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    string inputBuffer, outputMsg;
-    
-    // Hide cursor
-    CONSOLE_CURSOR_INFO cursorInfo;
-    GetConsoleCursorInfo(hConsole, &cursorInfo);
-    cursorInfo.bVisible = false;
-    SetConsoleCursorInfo(hConsole, &cursorInfo);
+// Handle input 
+void handleInput(string& inputBuffer, string& outputMsg, bool& running) {
+    if (_kbhit()) {
+        char ch = _getch(); 
 
-    while (true) {
-        DWORD currentTime = GetTickCount();
-        GetConsoleScreenBufferInfo(hConsole, &csbi);
-        int maxX = csbi.srWindow.Right;
-        int maxY = csbi.srWindow.Bottom - RESERVED_LINES;
-
-        // ---Always Clear Previous Marquee Position --- 
-        clearPosition(prevMarqueePos, text.length()); 
-
-        // --- Update Marquee Only When Needed ---
-        if (currentTime - lastUpdateTime >= sleepDuration) {
-            // Clear old position
-            clearPosition({static_cast<SHORT>(x), static_cast<SHORT>(y)}, text.length());
-
-            // Update position
-            x += dx;
-            y += dy;
-
-            // Bounce logic with clamping
-            if (x < 0 || x > maxX - text.length()) dx *= -1; 
-            if (y < 0 || y > maxY) dy *= -1; 
-
-            // Clamp to bounds 
-            x = max(0, min(x, maxX - (int)text.length())); 
-            y = max(0, min(y, maxY)); 
-
-            prevMarqueePos = {static_cast<SHORT>(x), static_cast<SHORT>(y)}; 
-            lastUpdateTime = currentTime;
+        if (ch == '\r') {
+            if (inputBuffer == "quit" || inputBuffer == "Quit") running = false; 
+            processCommand(inputBuffer, outputMsg); 
+            inputBuffer.clear(); 
+        } else if (ch == '\b' && !inputBuffer.empty()) {
+            inputBuffer.pop_back(); 
+        } else if (isprint(ch)) {
+            inputBuffer += ch;
         }
+    }
+}
 
-        // -- Draw New Maruqee Position 
+// Update marquee 
+void updateMarquee() {
+    DWORD currentTime = GetTickCount(); 
+
+    if (currentTime - lastUpdateTime >= sleepDuration) {
+        CONSOLE_SCREEN_BUFFER_INFO csbi; 
+        GetConsoleScreenBufferInfo(hConsole, &csbi); 
+        int maxX = csbi.srWindow.Right; 
+        int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
+
+        clearPosition(prevMarqueePos, text.length());
+
+        x += dx; 
+        y += dy; 
+
+        // Bounce logic 
+        if (x < 0 || x > maxX - text.length()) dx *= -1; 
+        if (y < START_Y || y > maxY) dy *= -1; 
+
+        x = max(0, min(x, maxX - (int)text.length())); 
+        y = max(START_Y, min(y, maxY)); 
+
+        prevMarqueePos = {static_cast<SHORT>(x), static_cast<SHORT>(y)}; 
+        lastUpdateTime = currentTime; 
+
         SetConsoleCursorPosition(hConsole, prevMarqueePos); 
-        cout << text; 
+        cout << text << flush; 
+    }
+}
 
-        // --- Process Input & UI Immediately ---
-        if (_kbhit()) {
-            char ch = _getch();
-            if (ch == '\r') { 
-                if (inputBuffer == "quit" || inputBuffer == "Quit") break;
-                processCommand(inputBuffer, outputMsg);
-                inputBuffer.clear();
-            } else if (ch == '\b' && !inputBuffer.empty()) {
-                inputBuffer.pop_back();
-            } else if (isprint(ch)) {
-                inputBuffer += ch;
-            }
-        }
+// Render UI 
+void renderUI(const string& inputBuffer, const string& outputMsg) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    int maxX = csbi.srWindow.Right; 
+    int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
 
-        // --- Update UI ---
-        COORD inputPos = {0, static_cast<SHORT>(maxY + 1)};
-        SetConsoleCursorPosition(hConsole, inputPos);
-        cout << "Input Command: " << inputBuffer << string(maxX - 15 - inputBuffer.length(), ' '); 
+    COORD inputPos = {0, static_cast<SHORT>(maxY + 1)}; 
+    SetConsoleCursorPosition(hConsole, inputPos); 
+    cout << "Input Command: " << inputBuffer << string(maxX - 15 - inputBuffer.length(), ' '); 
 
-        COORD outputPos = {0, static_cast<SHORT>(maxY + 2)};
-        SetConsoleCursorPosition(hConsole, outputPos);
-        cout << outputMsg << string(maxX - outputMsg.length(), ' '); 
+    COORD outputPos = {0, static_cast<SHORT>(maxY + 2)}; 
+    SetConsoleCursorPosition(hConsole, outputPos); 
+    cout << outputMsg.substr(0, maxX) << string(maxX - outputMsg.length(), ' ') << flush;
+}
 
-        outputMsg = outputMsg.substr(0, maxX); 
+// Main 
+int main() {
+    CONSOLE_CURSOR_INFO cursorInfo; 
+    GetConsoleCursorInfo(hConsole, &cursorInfo); 
+    cursorInfo.bVisible = false; 
+    SetConsoleCursorInfo(hConsole, &cursorInfo); 
 
-        // -- Clear Command -- 
-        if (outputMsg.find("cleared") != string::npos) {
-            outputMsg.clear();
-        } 
+    // Clear terminal on startup
+    clearScreen(); 
 
-        Sleep(10);
+    string inputBuffer, outputMsg; 
+    bool running = true; 
+
+    while (running) {
+        updateMarquee(); 
+        handleInput(inputBuffer, outputMsg, running); 
+        renderUI(inputBuffer, outputMsg); 
+        Sleep(10); 
     }
 
-    // Clean exit
-    cursorInfo.bVisible = true;
-    SetConsoleCursorInfo(hConsole, &cursorInfo);
-    cout << "\nGoodbye, Have a Nice Day :)\n";
+    // Clean exit below marquee area 
+    cursorInfo.bVisible = true; 
+    SetConsoleCursorInfo(hConsole, &cursorInfo); 
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    COORD exitPos = {0, static_cast<SHORT>(csbi.srWindow.Bottom + 1)}; 
+    SetConsoleCursorPosition(hConsole, exitPos); 
+
     return 0;
 }
