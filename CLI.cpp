@@ -1,3 +1,8 @@
+/** 
+ * CSOPESY Command Line Interface with 
+ * dynamic ASCII header and command processing. 
+*/
+
 #include <iostream> 
 #include <string> 
 #include <windows.h> 
@@ -7,17 +12,21 @@
 using namespace std; 
 
 // Color definitions 
-const int LIGHT_GREEN = 10; 
-const int LIGHT_YELLOW = 14;  
-const int DEFAULT_COLOR = 7; 
+const int LIGHT_GREEN = 10;     // Light green text 
+const int LIGHT_YELLOW = 14;    // Light yellow text 
+const int DEFAULT_COLOR = 7;    // Default console color
 
-SHORT inputLineY = 0; 
-SHORT outputLineY = 0; 
+// Position tracking
+SHORT inputLineY = 0;       // Y-coordinate for input prompt line 
+SHORT outputLineY = 0;      // Y-coordinate for command output display
 
 // Console handle 
-HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
+HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);  // Windows console handle
 
-// ASCII character patterns (C,S,O,P,E,S,Y) 
+/**
+ * Each vector element contains line-by-line representations
+ * Indexes 0-6 correspond to C, S, O, P, E, S, Y
+*/
 const vector<vector<string>> charPatterns = {
     { //C
         " ##### ", 
@@ -77,6 +86,10 @@ const vector<vector<string>> charPatterns = {
     }
 };
 
+/**
+ * Sets console text color using Windows API 
+ * @param color Windows color code (0-15)
+*/
 void setColor(int color) {
     SetConsoleTextAttribute(hConsole, color); 
 } 
@@ -85,13 +98,22 @@ void resetColor() {
     SetConsoleTextAttribute(hConsole, DEFAULT_COLOR); 
 } 
 
+/**
+ * Prints text centered within current console width 
+ * @param text String to center-align 
+ * @param width Current console width in characters
+*/
 void printCentered(const string& text, int width) {
     int padding = (width - text.length()) / 2; 
     padding = max(0, padding);
     cout << string(padding, ' ') << text << endl;
 }
 
-
+/**
+ * Generates ASCII header with CSOPESY text 
+ * @details Uses charPatterns to build letters line-by-line 
+ *          Wraps header in asterisk border matching console width 
+*/
 void printHeader() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
@@ -116,6 +138,11 @@ void printHeader() {
     resetColor(); 
 }
 
+/**
+ * Displays welcome messages with color formatting 
+ * @details First line: Light green welcome text 
+ *          Second line: Light yellow instructions 
+*/
 void printWelcome() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
@@ -130,6 +157,12 @@ void printWelcome() {
     resetColor();
 }
 
+/**
+ * Clears screen and reinitializes interface 
+ * @details 1. Fills console with spaces 
+ *          2. Reprints header/welcome messages 
+ *          3. Maintains color consistency 
+*/
 void clearScreen() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
@@ -159,6 +192,13 @@ void clearOutputLine() {
     cout << string(csbi.srWindow.Right, ' ');
 }
 
+/**
+ * Processes user commands and return response 
+ * @param cmd Input command string 
+ * @return Response messages or empty string for clear 
+ * @details Valid commands: initialize, screen, scheduler-test, 
+ *                          scheduler-stop, report-util, clear, exit
+*/
 string processCommand(const string& cmd) {
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-test", 
