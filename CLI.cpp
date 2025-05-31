@@ -1,6 +1,5 @@
 /** 
- * CSOPESY Command Line Interface with 
- * dynamic ASCII header and command processing. 
+ * CSOPESY Command Line Interface 
 */
 #include "ScreenManager.h"
 #include <iostream> 
@@ -100,6 +99,10 @@ void printWelcome() {
     resetColor();
 }
 
+/**
+ * Clears current input line by overwriting with spaces 
+ * @details Resets cursor to start of input line after clearing
+*/
 void clearInputLine() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
@@ -109,6 +112,10 @@ void clearInputLine() {
     SetConsoleCursorPosition(hConsole, inputPos);
 }
 
+/**
+ * Initializes cursor position trackers for i/o lines 
+ * @details Sets global Y-coordinates based on current cursor position
+*/
 void initializePositions() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
@@ -142,6 +149,10 @@ void clearScreen() {
     initializePositions();
 }
 
+/**
+ * Clears command output display line 
+ * @details Overwrites output line with spaces while preserving position
+*/
 void clearOutputLine() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
@@ -151,6 +162,11 @@ void clearOutputLine() {
     cout << string(csbi.srWindow.Right, ' ');
 }
 
+/**
+ * Splits input string into space-delimited tokens 
+ * @param input Raw command string to tokenize 
+ * @return Vector of individual command tokens
+*/
 vector<string> tokenize(const string& input) {
     vector<string> tokens; 
     istringstream iss(input); 
@@ -211,6 +227,10 @@ string processCommand(const string& cmd) {
     return "Unknown command: " + cmd;
 }
 
+/**
+ * Program entry point and main loop 
+ * @details Handles screen initialization, command processing, and UI updates
+*/
 int main() {
     auto manager = ScreenManager::getInstance();
     clearScreen();
