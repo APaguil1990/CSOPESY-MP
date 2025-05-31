@@ -134,6 +134,11 @@ void clearScreen() {
     printHeader(); 
     printWelcome();
 
+    CONSOLE_SCREEN_BUFFER_INFO newCsbi; 
+    GetConsoleScreenBufferInfo(hConsole, &newCsbi); 
+    COORD newPos = {0, static_cast<SHORT>(newCsbi.dwCursorPosition.Y)}; 
+    SetConsoleCursorPosition(hConsole, newPos);
+
     initializePositions();
 }
 
@@ -212,35 +217,50 @@ int main() {
 
     string input;
     while (true) {
+        // Get current positions
+        initializePositions();
+        
         if (!manager->screenActive()) {
             // Main screen
             clearInputLine();
+            COORD inputPos = {0, inputLineY};
+            SetConsoleCursorPosition(hConsole, inputPos);
             cout << "Enter a command: ";
-            getline(cin, input);
-            clearInputLine();  // Clear after input
             
-            if (input.empty()) continue;
+            getline(cin, input);
             transform(input.begin(), input.end(), input.begin(), ::tolower);
+            
+            // Clear input line
+            SetConsoleCursorPosition(hConsole, inputPos);
+            cout << string(80, ' ');
         } else {
             // Process screen
             clearInputLine();
+            COORD inputPos = {0, inputLineY};
+            SetConsoleCursorPosition(hConsole, inputPos);
             cout << "Screen active (type 'quit' to return): ";
+            
             getline(cin, input);
-            clearInputLine();  // Clear after input
             transform(input.begin(), input.end(), input.begin(), ::tolower);
+            
+            // Clear input line
+            SetConsoleCursorPosition(hConsole, inputPos);
+            cout << string(80, ' ');
         }
         
         string output = processCommand(input);
         
         if (!output.empty()) {
+            // Display output at fixed position
             clearOutputLine();
             COORD outputPos = {0, outputLineY};
             SetConsoleCursorPosition(hConsole, outputPos);
             cout << output;
+            
+            // Return cursor to input position
+            COORD inputPos = {0, inputLineY};
+            SetConsoleCursorPosition(hConsole, inputPos);
         }
-        
-        // Always reset positions after command
-        initializePositions();
     }
     return 0;
 }

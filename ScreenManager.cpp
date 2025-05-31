@@ -20,7 +20,7 @@ void ScreenManager::createScreen(const std::string& name) {
         screens[name] = std::make_shared<ProcessScreen>(name); 
         std::cout << "Create Screen: " << name << std::endl; 
     } 
-    attachScreen(name);
+    // attachScreen(name);
 }
 
 // Switch to existing screen 
