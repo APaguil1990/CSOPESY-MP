@@ -2,12 +2,13 @@
  * CSOPESY Command Line Interface with 
  * dynamic ASCII header and command processing. 
 */
-
+#include "ScreenManager.h"
 #include <iostream> 
 #include <string> 
 #include <windows.h> 
 #include <vector> 
 #include <algorithm> 
+#include <sstream>
 
 using namespace std; 
 
@@ -99,6 +100,22 @@ void printWelcome() {
     resetColor();
 }
 
+void clearInputLine() {
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    COORD inputPos = {0, inputLineY}; 
+    SetConsoleCursorPosition(hConsole, inputPos); 
+    cout << string(csbi.srWindow.Right, ' '); 
+    SetConsoleCursorPosition(hConsole, inputPos);
+}
+
+void initializePositions() {
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    inputLineY = csbi.dwCursorPosition.Y; 
+    outputLineY = inputLineY + 1;
+}
+
 /**
  * Clears screen and reinitializes interface 
  * @details 1. Fills console with spaces 
@@ -116,13 +133,8 @@ void clearScreen() {
     SetConsoleCursorPosition(hConsole, topLeft); 
     printHeader(); 
     printWelcome();
-}
 
-void initializePositions() {
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
-    inputLineY = csbi.dwCursorPosition.Y; 
-    outputLineY = inputLineY + 1;
+    initializePositions();
 }
 
 void clearOutputLine() {
@@ -134,6 +146,17 @@ void clearOutputLine() {
     cout << string(csbi.srWindow.Right, ' ');
 }
 
+vector<string> tokenize(const string& input) {
+    vector<string> tokens; 
+    istringstream iss(input); 
+    string token; 
+
+    while (iss >> token) {
+        tokens.push_back(token);
+    } 
+    return tokens;
+}
+
 /**
  * Processes user commands and return response 
  * @param cmd Input command string 
@@ -142,6 +165,31 @@ void clearOutputLine() {
  *                          scheduler-stop, report-util, clear, exit
 */
 string processCommand(const string& cmd) {
+    auto manager = ScreenManager::getInstance(); 
+    vector<string> tokens = tokenize(cmd);
+
+    // Handle screen commands 
+    if (tokens.size() >=3 && tokens[0] == "screen") {
+        if (tokens[1] == "-s") {
+            manager->createScreen(tokens[2]); 
+            return "Created screen: " + tokens[2]; 
+        } else if (tokens[1] == "-r") {
+            if (manager->screenExists(tokens[2])) {
+                manager->attachScreen(tokens[2]); 
+                return "";
+            }
+            return "Screen not found: " + tokens[2]; 
+        }
+    }
+
+    // Handle quit 
+    if (manager->screenActive() && (tokens[0] == "quit" || tokens[0] == "exit")) {
+        manager->detachScreen(); 
+        clearScreen(); 
+        initializePositions(); 
+        return "Returned to main menu";
+    }
+    
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-test", 
         "scheduler-stop", "report-util", "clear", "exit"
@@ -159,37 +207,40 @@ string processCommand(const string& cmd) {
 }
 
 int main() {
+    auto manager = ScreenManager::getInstance();
     clearScreen();
-    initializePositions();
 
     string input;
-    while(true) {
-        // Show input prompt
-        COORD inputPos = {0, inputLineY};
-        SetConsoleCursorPosition(hConsole, inputPos);
-        cout << "Enter a command: ";
-        
-        // Get input
-        getline(cin, input);
-        
-        // Clear input line
-        SetConsoleCursorPosition(hConsole, inputPos);
-        cout << string(80, ' ');  // Clear entire input line
-        
-        if(input.empty()) continue;
-        transform(input.begin(), input.end(), input.begin(), ::tolower);
+    while (true) {
+        if (!manager->screenActive()) {
+            // Main screen
+            clearInputLine();
+            cout << "Enter a command: ";
+            getline(cin, input);
+            clearInputLine();  // Clear after input
+            
+            if (input.empty()) continue;
+            transform(input.begin(), input.end(), input.begin(), ::tolower);
+        } else {
+            // Process screen
+            clearInputLine();
+            cout << "Screen active (type 'quit' to return): ";
+            getline(cin, input);
+            clearInputLine();  // Clear after input
+            transform(input.begin(), input.end(), input.begin(), ::tolower);
+        }
         
         string output = processCommand(input);
         
-        // Handle clear command's empty output
-        if(output.empty()) continue;
-
-        // Clear and show output
-        clearOutputLine();
-        COORD outputPos = {0, outputLineY};
-        SetConsoleCursorPosition(hConsole, outputPos);
-        cout << output;
+        if (!output.empty()) {
+            clearOutputLine();
+            COORD outputPos = {0, outputLineY};
+            SetConsoleCursorPosition(hConsole, outputPos);
+            cout << output;
+        }
+        
+        // Always reset positions after command
+        initializePositions();
     }
-    
     return 0;
 }
