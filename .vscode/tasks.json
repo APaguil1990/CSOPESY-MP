@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build C++ Project",
+      "type": "shell",
+      "command": "C:\\mingw64\\bin\\g++.exe",
+      "args": [
+        "-std=c++20",
+        "-g",
+        "-fdiagnostics-color=always",
+        "CLI.cpp",
+        "ProcessScreen.cpp",
+        "ScreenManager.cpp",
+        "-o",
+        "${workspaceFolder}\\console.exe"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "detail": "Builds the entire CSOPESY-MP project (console.exe)."
+    }
+  ]
+}
