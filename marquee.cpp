@@ -54,10 +54,16 @@ void processCommand(const string& cmd, string& outputMsg) {
             outputMsg = "Invalid speed value!";
         }
     } else if (action == "text") {
-        string newText = cmd.substr(cmd.find(' ') + 1);
-        clearPosition(prevMarqueePos, text.length());
-        text = newText;
-        outputMsg = "Text changed to '" + newText + "'";
+        size_t pos = cmd.find(' '); 
+
+        if (pos != string::npos && pos + 1 < cmd.length()) {
+            string newText = cmd.substr(pos + 1);
+            clearPosition(prevMarqueePos, text.length());
+            text = newText;
+            outputMsg = "Text changed to '" + newText + "'";
+        } else {
+            outputMsg = "Error: Please provide text after 'text' command :)";
+        }
     } else if (action == "clear") {
         // Clear entire marquee area + UI 
         _CONSOLE_SCREEN_BUFFER_INFO csbi; 
@@ -103,20 +109,28 @@ void updateMarquee() {
     if (currentTime - lastUpdateTime >= sleepDuration) {
         CONSOLE_SCREEN_BUFFER_INFO csbi; 
         GetConsoleScreenBufferInfo(hConsole, &csbi); 
-        int maxX = csbi.srWindow.Right; 
-        int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
+        const int maxX = csbi.srWindow.Right; 
+        const int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
 
         clearPosition(prevMarqueePos, text.length());
 
         x += dx; 
         y += dy; 
 
+        // Calculate the safe boundaries
+        const int textLen = static_cast<int>(text.length()); 
+        const int xBound = std::max(0, maxX - textLen); 
+        const int yBound = maxY;
+
         // Bounce logic 
         if (x < 0 || x > maxX - text.length()) dx *= -1; 
         if (y < START_Y || y > maxY) dy *= -1; 
 
-        x = max(0, min(x, maxX - (int)text.length())); 
-        y = max(START_Y, min(y, maxY)); 
+        // x = max(0, min(x, maxX - (int)text.length())); 
+        // y = max(START_Y, min(y, maxY)); 
+        
+        x = std::clamp(x, 0, xBound); 
+        y = std::clamp(y, START_Y, yBound);
 
         prevMarqueePos = {static_cast<SHORT>(x), static_cast<SHORT>(y)}; 
         lastUpdateTime = currentTime; 
