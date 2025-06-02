@@ -5,12 +5,24 @@
 #include <sstream> 
 #include <algorithm> 
 #include <iterator> 
+#include <vector>
 
 using namespace std; 
 
+// ASCII Header Art 
+const vector<string> HEADER_ART = { 
+    R"(.___  ___.      ___      .______        ______      __    __   _______  _______      ______   ______   .__   __.      _______.  ______    __       _______ )",
+    R"(|   \/   |     /   \     |   _  \      /  __  \    |  |  |  | |   ____||   ____|    /      | /  __  \  |  \ |  |     /       | /  __  \  |  |     |   ____|)", 
+    R"(|  \  /  |    /  ^  \    |  |_)  |    |  |  |  |   |  |  |  | |  |__   |  |__      |  ,----'|  |  |  | |   \|  |    |   (----`|  |  |  | |  |     |  |__   )", 
+    R"(|  |\/|  |   /  /_\  \   |      /     |  |  |  |   |  |  |  | |   __|  |   __|     |  |     |  |  |  | |  . `  |     \   \    |  |  |  | |  |     |   __|  )", 
+    R"(|  |  |  |  /  _____  \  |  |\  \----.|  `--'  '--.|  `--'  | |  |____ |  |____    |  `----.|  `--'  | |  |\   | .----)   |   |  `--'  | |  `----.|  |____ )", 
+    R"(|__|  |__| /__/     \__\ | _| `._____| \_____\_____\\______/  |_______||_______|    \______| \______/  |__| \__| |_______/     \______/  |_______||_______|)"
+};
+
 // Global variables 
+const int HEADER_LINES = HEADER_ART.size();
 const int RESERVED_LINES = 3; 
-const int START_Y = 2; 
+const int START_Y = HEADER_LINES + 1; 
 string text = "Hello World, I am a Marquee Text"; 
 int sleepDuration = 50; 
 int x = 0, y = START_Y; 
@@ -19,21 +31,41 @@ DWORD lastUpdateTime = 0;
 COORD prevMarqueePos = {0, static_cast<SHORT>(START_Y)}; 
 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
 
+// Print ASCII header 
+void printHeader() {
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    int width = csbi.srWindow.Right - csbi.srWindow.Left + 1; 
+
+    COORD headerPos = {0, 0}; 
+    SetConsoleCursorPosition(hConsole, headerPos); 
+
+    for (const string& line : HEADER_ART) {
+        int padding = (width - static_cast<int>(line.length())) / 2; 
+        padding = max(0, padding); 
+        cout << string(padding, ' ') << line << endl;
+    }
+}
+
 // Clear screen 
 void clearScreen() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
 
-    COORD topLeft = {0, 0}; 
+    COORD clearStart = {0, static_cast<SHORT>(HEADER_LINES)}; 
+    DWORD cells = csbi.dwSize.X * (csbi.dwSize.Y - HEADER_LINES); 
     DWORD written; 
-    FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X * csbi.dwSize.Y, topLeft, &written); 
-    SetConsoleCursorPosition(hConsole, topLeft); 
+
+    FillConsoleOutputCharacter(hConsole, ' ', cells, clearStart, &written); 
+    SetConsoleCursorPosition(hConsole, clearStart);
 } 
 
 // Clear position 
 void clearPosition(COORD pos, int length) {
-    SetConsoleCursorPosition(hConsole, pos); 
-    cout << string(length, ' ') << flush; 
+    if (pos.Y >= HEADER_LINES) {
+        SetConsoleCursorPosition(hConsole, pos); 
+        cout << string(length, ' ') << flush; 
+    }
 } 
 
 // Process commands 
@@ -163,8 +195,17 @@ int main() {
     cursorInfo.bVisible = false; 
     SetConsoleCursorInfo(hConsole, &cursorInfo); 
 
-    // Clear terminal on startup
-    clearScreen(); 
+    // // Clear terminal on startup
+    // clearScreen(); 
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi; 
+    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    COORD topLeft = {0, 0}; 
+    DWORD written; 
+    FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X * csbi.dwSize.Y, topLeft, &written); 
+    SetConsoleCursorPosition(hConsole, topLeft); 
+
+    printHeader();
 
     string inputBuffer, outputMsg; 
     bool running = true; 
@@ -180,7 +221,6 @@ int main() {
     cursorInfo.bVisible = true; 
     SetConsoleCursorInfo(hConsole, &cursorInfo); 
 
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
     COORD exitPos = {0, static_cast<SHORT>(csbi.srWindow.Bottom + 1)}; 
     SetConsoleCursorPosition(hConsole, exitPos); 
