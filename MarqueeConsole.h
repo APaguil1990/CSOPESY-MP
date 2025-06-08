@@ -23,6 +23,7 @@ private:
         DWORD lastUpdateTime; 
         std::string inputBuffer; 
         std::string outputMsg; 
+        int pollingInterval;
     };
 
     const std::vector<std::string> HEADER_ART = { 
@@ -52,6 +53,7 @@ private:
     State state;
     
     // Core functionality 
+    int getMonitorRefreshRate(); 
     void printHeader(); 
     void clearScreen(bool withHeader = false); 
     void clearPosition(COORD pos, int length); 

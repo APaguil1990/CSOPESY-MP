@@ -22,7 +22,8 @@ MarqueeConsole::MarqueeConsole() :
         {0, static_cast<SHORT>(START_Y)}, 
         0, 
         "", 
-        ""
+        "", 
+        10
     };
 
     // Set cursor invisible
@@ -51,6 +52,16 @@ MarqueeConsole::~MarqueeConsole() {
     cursorInfo.bVisible = true; 
     SetConsoleCursorInfo(hConsole, &cursorInfo); 
 } 
+
+int MarqueeConsole::getMonitorRefreshRate() {
+    DEVMODE devMode = {}; 
+    devMode.dmSize = sizeof(DEVMODE); 
+
+    if (EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &devMode)) {
+        return devMode.dmDisplayFrequency; 
+    }
+    return 60;
+}
 
 // Display ASCII header at top of screen 
 void MarqueeConsole::printHeader() {
@@ -122,6 +133,15 @@ void MarqueeConsole::processCommand(const string& cmd) {
         } else {
             state.outputMsg = "Error: Please provide text after 'text' command :)"; 
         }
+    } else if (action == "pollrate") {
+        int newRate; 
+
+        if (iss >> newRate && newRate >= 1 && newRate <= 1000) {
+            state.pollingInterval = newRate; 
+            state.outputMsg = format("Polling interval set to {} ms", newRate);
+        } else {
+            state.outputMsg = "Invalid pollrate value (1 - 1000 ms allowed)";
+        }
     } else if (action == "clear") {
         // Only clear bottom input/output lines, not full screen
         stateMutex.unlock(); 
@@ -163,6 +183,9 @@ void MarqueeConsole::handleResize() {
 
 // Updates marquee text's movement and bouncing behavior
 void MarqueeConsole::updateMarquee() {
+    int refreshRate = getMonitorRefreshRate(); 
+    int frameDelay = 1000 / refreshRate;
+    
     while (running) {
         handleResize();
         DWORD currentTime = GetTickCount(); 
@@ -206,7 +229,8 @@ void MarqueeConsole::updateMarquee() {
                 cout << state.text << flush; 
             }
         }
-        this_thread::sleep_for(10ms);
+        // this_thread::sleep_for(10ms); 
+        this_thread::sleep_for(std::chrono::milliseconds(frameDelay));
     }
 }
 
@@ -237,6 +261,9 @@ void MarqueeConsole::renderUI() {
 
 // Collects keystrokes in real time and builds input commands
 void MarqueeConsole::inputHandler() {
+    int refreshRate = getMonitorRefreshRate(); 
+    int frameDelay = 1000 / refreshRate; 
+    
     while (running) {
         if (_kbhit()) {
             char ch = _getch(); 
@@ -259,7 +286,9 @@ void MarqueeConsole::inputHandler() {
                 processCommand(command); 
             }
         }
-        this_thread::sleep_for(10ms);
+        // this_thread::sleep_for(10ms); 
+        this_thread::sleep_for(std::chrono::milliseconds(frameDelay));
+        this_thread::sleep_for(chrono::milliseconds(state.pollingInterval));
     }
 }
 
