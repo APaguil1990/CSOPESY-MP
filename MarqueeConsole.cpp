@@ -143,20 +143,25 @@ void MarqueeConsole::processCommand(const string& cmd) {
             state.outputMsg = "Invalid pollrate value (1 - 1000 ms allowed)";
         }
     } else if (action == "clear") {
-        // Only clear bottom input/output lines, not full screen
         stateMutex.unlock(); 
+
+        // Get screen buffer 
         CONSOLE_SCREEN_BUFFER_INFO csbi; 
-        GetConsoleScreenBufferInfo(hConsole, &csbi); 
-        int maxX = csbi.srWindow.Right; 
-        int maxY = csbi.srWindow.Bottom; 
+        GetConsoleScreenBufferInfo(hConsole, &csbi);
 
-        COORD inputPos = {0, static_cast<SHORT>(maxY - 1)}; 
-        COORD outputPos = {0, static_cast<SHORT>(maxY)}; 
-
+        COORD topLeft = {0, 0}; 
         DWORD written; 
-        FillConsoleOutputCharacter(hConsole, ' ', maxX, inputPos, &written); 
-        FillConsoleOutputCharacter(hConsole, ' ', maxX, outputPos, &written); 
-        SetConsoleCursorPosition(hConsole, inputPos); 
+        DWORD totalCells = csbi.dwSize.X * csbi.dwSize.Y; 
+
+        // Clear console with spaces 
+        FillConsoleOutputCharacter(hConsole, ' ', totalCells, topLeft, &written); 
+        FillConsoleOutputAttribute(hConsole, csbi.wAttributes, totalCells, topLeft, &written);
+
+        // Reset cursor to top-left 
+        SetConsoleCursorPosition(hConsole, topLeft); 
+
+        // Redraw header and set cursor after it 
+        printHeader(); 
         stateMutex.lock();
 
         state.outputMsg = "Terminal cleared.";
