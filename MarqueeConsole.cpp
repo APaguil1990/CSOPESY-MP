@@ -2,6 +2,7 @@
 #include <sstream> 
 #include <algorithm> 
 #include <chrono> 
+#include <iomanip>
 
 using namespace std; 
 using namespace std::chrono_literals; 
@@ -111,17 +112,22 @@ void MarqueeConsole::processCommand(const string& cmd) {
     string action; 
     iss >> action; 
 
-    transform(action.begin(), action.end(), action.begin(), ::tolower); 
+    std::transform(action.begin(), action.end(), action.begin(), ::tolower); 
+
+    std::ostringstream oss; 
 
     if (action == "speed") {
         int newSpeed; 
 
         if (iss >> newSpeed && newSpeed > 0) {
             state.sleepDuration = newSpeed; 
-            state.outputMsg = format("Changed speed to {}", newSpeed); 
+            // state.outputMsg = format("Changed speed to {}", newSpeed);  
+            oss << "Changed speed to " << newSpeed;
         } else {
-            state.outputMsg = "Invalid speed value!"; 
+            // state.outputMsg = "Invalid speed value!"; 
+            oss << "Invalid speed value!";
         }
+        state.outputMsg = oss.str();
     } else if (action == "text") {
         size_t pos = cmd.find(' '); 
 
@@ -129,19 +135,25 @@ void MarqueeConsole::processCommand(const string& cmd) {
             string newText = cmd.substr(pos + 1); 
             clearPosition(state.prevMarqueePos, state.text.length()); 
             state.text = newText; 
-            state.outputMsg = format("Text changed to '{}'", newText); 
+            // state.outputMsg = format("Text changed to '{}'", newText); 
+            oss << "Text changed to '" << newText << "'"; 
         } else {
-            state.outputMsg = "Error: Please provide text after 'text' command :)"; 
-        }
+            // state.outputMsg = "Error: Please provide text after 'text' command :)"; 
+            oss << "Error: Please provide text after 'text' command :)";
+        } 
+        state.outputMsg = oss.str();
     } else if (action == "pollrate") {
         int newRate; 
 
         if (iss >> newRate && newRate >= 1 && newRate <= 1000) {
             state.pollingInterval = newRate; 
-            state.outputMsg = format("Polling interval set to {} ms", newRate);
+            // state.outputMsg = format("Polling interval set to {} ms", newRate); 
+            oss << "Polling interval set to " << newRate << " ms";
         } else {
-            state.outputMsg = "Invalid pollrate value (1 - 1000 ms allowed)";
-        }
+            // state.outputMsg = "Invalid pollrate value (1 - 1000 ms allowed)"; 
+            oss << "Invalid pollrate value (1 - 1000 ms allowed)"; 
+        } 
+        state.outputMsg = oss.str();
     } else if (action == "clear") {
         stateMutex.unlock(); 
 
@@ -169,7 +181,9 @@ void MarqueeConsole::processCommand(const string& cmd) {
         running = false; 
         state.outputMsg = "Goodbye, Have a Nice Day :)"; 
     } else {
-        state.outputMsg = format("Unknown command: {}", cmd);
+        // state.outputMsg = format("Unknown command: {}", cmd); 
+        oss << "Unknown command: " << cmd; 
+        state.outputMsg = oss.str();
     }
 } 
 
@@ -252,11 +266,19 @@ void MarqueeConsole::renderUI() {
 
             COORD inputPos = {0, static_cast<SHORT>(maxY + 1)}; 
             SetConsoleCursorPosition(hConsole, inputPos); 
-            cout << format("Input Command: {:<{}}", state.inputBuffer, maxX - 15); 
+
+            std::ostringstream ossInput;
+            // cout << format("Input Command: {:<{}}", state.inputBuffer, maxX - 15);  
+            ossInput << "Input Command: " << std::left << std::setw(maxX - 15) << state.inputBuffer; 
+            std::cout << ossInput.str();
 
             COORD outputPos = {0, static_cast<SHORT>(maxY + 2)}; 
             SetConsoleCursorPosition(hConsole, outputPos); 
-            cout << format("{:<{}}", state.outputMsg.substr(0, maxX), maxX); 
+
+            std::ostringstream ossOutput;
+            // cout << format("{:<{}}", state.outputMsg.substr(0, maxX), maxX); 
+            ossOutput << std::left << std::setw(maxX) << state.outputMsg.substr(0, maxX); 
+            std::cout << ossOutput.str();
 
             stateMutex.unlock();
         }
@@ -329,7 +351,11 @@ void MarqueeConsole::run() {
         // Output message at bottom 
         COORD outputPos = {0, static_cast<SHORT>(maxY + 2)}; 
         SetConsoleCursorPosition(hConsole, outputPos); 
-        std::cout << std::format("{:<{}}", state.outputMsg.substr(0, maxX), maxX);
+        
+        // std::cout << std::format("{:<{}}", state.outputMsg.substr(0, maxX), maxX); 
+        std::ostringstream oss;
+        oss << std::left << std::setw(maxX) << state.outputMsg.substr(0, maxX); 
+        std::cout << oss.str();
     }
 
     // Assurance prompt doesn't overwrite message 
