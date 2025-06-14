@@ -9,7 +9,6 @@
 #include <memory> 
 #include <windows.h> 
 #include <conio.h> 
-#include <format>
 
 class MarqueeConsole {
 private: 
