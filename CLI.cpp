@@ -216,7 +216,7 @@ string processCommand(const string& cmd) {
     }
 
     if (tokens[0] == "scheduler-start"){
-
+        
     }
 
     // Handle quit 
