@@ -3,6 +3,7 @@
 */
 #include "ScreenManager.h"
 #include <iostream> 
+#include <fstream>
 #include <string> 
 #include <windows.h> 
 #include <vector> 
@@ -10,7 +11,17 @@
 #include <thread>
 #include <sstream>
 
-using namespace std; 
+using namespace std;
+
+bool initFlag = false;
+
+//config parameters
+int CPU  = 0;
+string scheduler = "";
+int qCycles = 0;
+int MIN_INS = 0;
+int MAX_INS = 0;
+int delayPerExec = 0;
 
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 
@@ -179,9 +190,62 @@ vector<string> tokenize(const string& input) {
     return tokens;
 }
 
+/**
+ * Runs the marquee console
+ */
 void runMarquee(){
     extern void marquee();
     marquee();
+}
+
+/**
+ * Checks for the config.txt file and reads its contents to get values
+ * @return true or false
+ */
+bool readConfig(){
+    vector<string> values;
+
+    ifstream configFile("config.txt");
+            
+    if(!configFile.is_open()){
+        return false;
+    }
+
+    string line;
+    while(getline(configFile,line)){
+        istringstream iss(line);
+        string key, value;
+        // Read key and value from the line
+        if (std::getline(iss, key, ' ') && std::getline(iss, value)) {
+            // Remove quotes from the value if present
+            if (value.front() == '"' && value.back() == '"') {
+                value = value.substr(1, value.size() - 2);
+            }
+            
+            // Assign values to corresponding variables based on the key
+            if (key == "num-cpu") {
+                CPU = std::stoi(value);
+            } else if (key == "scheduler") {
+                scheduler = value;
+            } else if (key == "quantum-cycles") {
+                qCycles = std::stoi(value);
+            } else if (key == "min-ins") {
+                MIN_INS = std::stoi(value);
+            } else if (key == "max-ins") {
+                MAX_INS = std::stoi(value);
+            } else if (key == "delay-per-exec") {
+                delayPerExec = std::stoi(value);
+            }
+        }
+    }
+    configFile.close();
+    //for checking values
+    // for (const auto& value : values) {
+    //     std::cout << value << std::endl;
+    // }
+    
+    initFlag = true;
+    return true;
 }
 
 /**
@@ -194,6 +258,25 @@ void runMarquee(){
 string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 
     vector<string> tokens = tokenize(cmd);
+    
+    vector<string> validCommands = {
+        "initialize", "screen", "scheduler-start", "marquee",
+        "scheduler-stop", "report-util", "clear", "exit"
+    };
+
+    //handle initialization before other commands
+    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == false){
+        if (cmd == "initialize"){
+            //read the config file
+            if (readConfig() == false){
+                return "initialization failed, please try again";
+            };
+
+            return "initialization finished";
+        }
+        if (cmd == "exit") exit(0);
+        return "use the 'initialize' command before using other commands";
+    }
 
     // Handle screen commands 
     if (tokens.size() >=3 && tokens[0] == "screen") {
@@ -209,16 +292,6 @@ string processCommand(const string& cmd) {
         }
     }
 
-    if (tokens[0] == "marquee"){
-        thread marquee(runMarquee);
-        marquee.join();
-        clearScreen();
-    }
-
-    if (tokens[0] == "scheduler-start"){
-        
-    }
-
     // Handle quit 
     if (manager->screenActive() && (tokens[0] == "quit" || tokens[0] == "exit")) {
         manager->detachScreen(); 
@@ -226,19 +299,33 @@ string processCommand(const string& cmd) {
         initializePositions(); 
         return "Returned to main menu";
     }
-    
-    vector<string> validCommands = {
-        "initialize", "screen", "scheduler-start", "marquee",
-        "scheduler-stop", "report-util", "clear", "exit"
-    };
-    
-    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end()) {
+
+    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == true) {
         if (cmd == "clear") {
             clearScreen();
             return "SCREEN CLEARED"; // Special flag
         }
+        
+        if (cmd == "marquee"){
+            thread marquee(runMarquee);
+            marquee.join();
+            clearScreen();
+        }
+
+        if (cmd == "scheduler-start"){
+            //get the parameters read from the config
+            if (scheduler == "rr" || scheduler == "RR"){
+
+            }else if (scheduler == "fcfs" || scheduler == "FCFS"){
+                
+            }
+        }
+
+        if (cmd == "initialize"){
+            return "initialize has already been used";
+        }
+
         if (cmd == "exit") exit(0);
-        return "'" + cmd + "' command recognized. Doing something.";
     }
     //If command was not recognized
     return "Unknown command: " + cmd;
