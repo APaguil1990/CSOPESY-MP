@@ -7,6 +7,7 @@
 #include <windows.h> 
 #include <vector> 
 #include <algorithm> 
+#include <thread>
 #include <sstream>
 
 using namespace std; 
@@ -178,6 +179,11 @@ vector<string> tokenize(const string& input) {
     return tokens;
 }
 
+void runMarquee(){
+    extern void marquee();
+    marquee();
+}
+
 /**
  * Processes user commands and return response 
  * @param cmd Input command string 
@@ -203,6 +209,16 @@ string processCommand(const string& cmd) {
         }
     }
 
+    if (tokens[0] == "marquee"){
+        thread marquee(runMarquee);
+        marquee.join();
+        clearScreen();
+    }
+
+    if (tokens[0] == "scheduler-start"){
+
+    }
+
     // Handle quit 
     if (manager->screenActive() && (tokens[0] == "quit" || tokens[0] == "exit")) {
         manager->detachScreen(); 
@@ -212,10 +228,10 @@ string processCommand(const string& cmd) {
     }
     
     vector<string> validCommands = {
-        "initialize", "screen", "scheduler-test", 
+        "initialize", "screen", "scheduler-start", "marquee",
         "scheduler-stop", "report-util", "clear", "exit"
     };
-
+    
     if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end()) {
         if (cmd == "clear") {
             clearScreen();
@@ -223,7 +239,8 @@ string processCommand(const string& cmd) {
         }
         if (cmd == "exit") exit(0);
         return "'" + cmd + "' command recognized. Doing something.";
-    } 
+    }
+    //If command was not recognized
     return "Unknown command: " + cmd;
 }
 

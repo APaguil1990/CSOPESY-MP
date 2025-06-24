@@ -29,16 +29,16 @@ int x = 0, y = START_Y;
 int dx = 1, dy = 1; 
 DWORD lastUpdateTime = 0; 
 COORD prevMarqueePos = {0, static_cast<SHORT>(START_Y)}; 
-HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
+HANDLE hMarqueeConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
 
 // Print ASCII header 
-void printHeader() {
+void printMarqueeHeader() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    GetConsoleScreenBufferInfo(hMarqueeConsole, &csbi); 
     int width = csbi.srWindow.Right - csbi.srWindow.Left + 1; 
 
     COORD headerPos = {0, 0}; 
-    SetConsoleCursorPosition(hConsole, headerPos); 
+    SetConsoleCursorPosition(hMarqueeConsole, headerPos); 
 
     for (const string& line : HEADER_ART) {
         int padding = (width - static_cast<int>(line.length())) / 2; 
@@ -48,22 +48,22 @@ void printHeader() {
 }
 
 // Clear screen 
-void clearScreen() {
+void clearMarqueeScreen() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    GetConsoleScreenBufferInfo(hMarqueeConsole, &csbi); 
 
     COORD clearStart = {0, static_cast<SHORT>(HEADER_LINES)}; 
     DWORD cells = csbi.dwSize.X * (csbi.dwSize.Y - HEADER_LINES); 
     DWORD written; 
 
-    FillConsoleOutputCharacter(hConsole, ' ', cells, clearStart, &written); 
-    SetConsoleCursorPosition(hConsole, clearStart);
+    FillConsoleOutputCharacter(hMarqueeConsole, ' ', cells, clearStart, &written); 
+    SetConsoleCursorPosition(hMarqueeConsole, clearStart);
 } 
 
 // Clear position 
 void clearPosition(COORD pos, int length) {
     if (pos.Y >= HEADER_LINES) {
-        SetConsoleCursorPosition(hConsole, pos); 
+        SetConsoleCursorPosition(hMarqueeConsole, pos); 
         cout << string(length, ' ') << flush; 
     }
 } 
@@ -140,7 +140,7 @@ void updateMarquee() {
 
     if (currentTime - lastUpdateTime >= sleepDuration) {
         CONSOLE_SCREEN_BUFFER_INFO csbi; 
-        GetConsoleScreenBufferInfo(hConsole, &csbi); 
+        GetConsoleScreenBufferInfo(hMarqueeConsole, &csbi); 
         const int maxX = csbi.srWindow.Right; 
         const int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
 
@@ -167,7 +167,7 @@ void updateMarquee() {
         prevMarqueePos = {static_cast<SHORT>(x), static_cast<SHORT>(y)}; 
         lastUpdateTime = currentTime; 
 
-        SetConsoleCursorPosition(hConsole, prevMarqueePos); 
+        SetConsoleCursorPosition(hMarqueeConsole, prevMarqueePos); 
         cout << text << flush; 
     }
 }
@@ -175,37 +175,37 @@ void updateMarquee() {
 // Render UI 
 void renderUI(const string& inputBuffer, const string& outputMsg) {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    GetConsoleScreenBufferInfo(hMarqueeConsole, &csbi); 
     int maxX = csbi.srWindow.Right; 
     int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
 
     COORD inputPos = {0, static_cast<SHORT>(maxY + 1)}; 
-    SetConsoleCursorPosition(hConsole, inputPos); 
+    SetConsoleCursorPosition(hMarqueeConsole, inputPos); 
     cout << "Input Command: " << inputBuffer << string(maxX - 15 - inputBuffer.length(), ' '); 
 
     COORD outputPos = {0, static_cast<SHORT>(maxY + 2)}; 
-    SetConsoleCursorPosition(hConsole, outputPos); 
+    SetConsoleCursorPosition(hMarqueeConsole, outputPos); 
     cout << outputMsg.substr(0, maxX) << string(maxX - outputMsg.length(), ' ') << flush;
 }
 
 // Main 
-int main() {
+int marquee() {
     CONSOLE_CURSOR_INFO cursorInfo; 
-    GetConsoleCursorInfo(hConsole, &cursorInfo); 
+    GetConsoleCursorInfo(hMarqueeConsole, &cursorInfo); 
     cursorInfo.bVisible = false; 
-    SetConsoleCursorInfo(hConsole, &cursorInfo); 
+    SetConsoleCursorInfo(hMarqueeConsole, &cursorInfo); 
 
     // // Clear terminal on startup
-    // clearScreen(); 
+    // clearMarqueeScreen(); 
 
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    GetConsoleScreenBufferInfo(hMarqueeConsole, &csbi); 
     COORD topLeft = {0, 0}; 
     DWORD written; 
-    FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X * csbi.dwSize.Y, topLeft, &written); 
-    SetConsoleCursorPosition(hConsole, topLeft); 
+    FillConsoleOutputCharacter(hMarqueeConsole, ' ', csbi.dwSize.X * csbi.dwSize.Y, topLeft, &written); 
+    SetConsoleCursorPosition(hMarqueeConsole, topLeft); 
 
-    printHeader();
+    printMarqueeHeader();
 
     string inputBuffer, outputMsg; 
     bool running = true; 
@@ -219,11 +219,11 @@ int main() {
 
     // Clean exit below marquee area 
     cursorInfo.bVisible = true; 
-    SetConsoleCursorInfo(hConsole, &cursorInfo); 
+    SetConsoleCursorInfo(hMarqueeConsole, &cursorInfo); 
 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    GetConsoleScreenBufferInfo(hMarqueeConsole, &csbi); 
     COORD exitPos = {0, static_cast<SHORT>(csbi.srWindow.Bottom + 1)}; 
-    SetConsoleCursorPosition(hConsole, exitPos); 
+    SetConsoleCursorPosition(hMarqueeConsole, exitPos); 
 
     return 0;
 }
