@@ -194,7 +194,7 @@ vector<string> tokenize(const string& input) {
  * Runs the marquee console
  */
 void runMarquee(){
-    extern void marquee();
+    void marquee();
     marquee();
 }
 
@@ -239,14 +239,11 @@ bool readConfig(){
         }
     }
     configFile.close();
-    //for checking values
-    // for (const auto& value : values) {
-    //     std::cout << value << std::endl;
-    // }
-    
     initFlag = true;
     return true;
 }
+
+
 
 /**
  * Processes user commands and return response 
@@ -310,15 +307,18 @@ string processCommand(const string& cmd) {
             thread marquee(runMarquee);
             marquee.join();
             clearScreen();
+            return "marquee console finished";
         }
 
         if (cmd == "scheduler-start"){
-            //get the parameters read from the config
-            if (scheduler == "rr" || scheduler == "RR"){
+            //start the scheduler thread
+            
+            return  "scheduler command recognized";
+        }
 
-            }else if (scheduler == "fcfs" || scheduler == "FCFS"){
-                
-            }
+        if (cmd == "scheduler-stop"){
+            //stop the scheduler thread
+            return "scheduler stopped";
         }
 
         if (cmd == "initialize"){
