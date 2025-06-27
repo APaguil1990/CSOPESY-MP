@@ -207,6 +207,22 @@ void runMarquee(){
 }
 
 /**
+ * Runs the FCFS Scheduler
+ */
+void runFCFS(){
+    void FCFS();
+    FCFS();
+}
+
+/**
+ * Runs the RR Scheduler
+ */
+void runRR(){
+    void RR();
+    RR();
+}
+
+/**
  * Checks for the config.txt file and reads its contents to get values
  * @return true or false
  */
@@ -320,12 +336,22 @@ string processCommand(const string& cmd) {
 
         if (cmd == "scheduler-start"){
             //start the scheduler thread
-            
-            return  "scheduler command recognized";
+            if (scheduler == "fcfs"){
+               thread schedulerFCFS(runFCFS);
+               schedulerFCFS.detach();
+               return "running FCFS scheduler";
+            }else if (scheduler == "rr"){
+               thread schedulerRR(runFCFS);
+               schedulerRR.detach();
+               return "running RR scheduler";
+            }
+            //if scheduler does not work
+            return "error: cannot define scheduler";
         }
 
         if (cmd == "scheduler-stop"){
             //stop the scheduler thread
+            
             return "scheduler stopped";
         }
 
