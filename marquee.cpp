@@ -189,7 +189,7 @@ void renderUI(const string& inputBuffer, const string& outputMsg) {
 }
 
 // Main 
-int marquee() {
+int main() {
     CONSOLE_CURSOR_INFO cursorInfo; 
     GetConsoleCursorInfo(hMarqueeConsole, &cursorInfo); 
     cursorInfo.bVisible = false; 
