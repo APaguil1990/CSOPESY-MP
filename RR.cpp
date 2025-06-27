@@ -14,10 +14,6 @@
 
 #include "config.h"
 
-unsigned short variable_a = 0;
-unsigned short variable_b = 0;
-unsigned short variable_c = 0;
-
 // --- Configuration ---
 const int NUM_CORES = 4;
 const int NUM_PROCESSES = 10;
@@ -198,27 +194,30 @@ void declareCommand() {
     switch (std::rand()%3) {
         case 0:
             variable_a = 1;
+            break;
         case 1:
             variable_b = 1;
+            break;
         case 2:
             variable_c = 1;
+            break;
     }
 }
 
 void addCommand() {
-
+    variable_a = variable_b + variable_c;
 }
 
 void subtractCommand() {
-
+    variable_a = variable_b - variable_c;
 }
 
 void sleepCommand() {
-
+    cpuClocks += std::rand()%65536;
 }
 
 void forCommand() {
-    
+    std::cout << "idk how to do this";
 }
 
 int RR() {
@@ -240,18 +239,27 @@ int RR() {
         switch (instruction) {
             case 0:
                 std::cout << "PRINT COMMAND";
+                break;
             case 1:
                 std::cout << "DECLARE COMMAND";
                 declareCommand();
+                break;
             case 2:
                 std::cout << "ADD COMMAND";
-                
+                addCommand();
+                break;
             case 3:
                 std::cout << "SUBTRACT COMMAND";
+                subtractCommand();
+                break;
             case 4:
                 std::cout << "SLEEP COMMAND";
+                sleepCommand();
+                break;
             case 5:
                 std::cout << "FOR COMMAND";
+                forCommand();
+                break;
         }
 
         command_stream << "cmd log here";
