@@ -12,6 +12,12 @@
 #include <atomic>
 #include <sstream>
 
+#include "config.h"
+
+unsigned short variable_a = 0;
+unsigned short variable_b = 0;
+unsigned short variable_c = 0;
+
 // --- Configuration ---
 const int NUM_CORES = 4;
 const int NUM_PROCESSES = 10;
@@ -101,7 +107,7 @@ void scheduler_thread_func() {
 }
 
 // --- CPU Worker Thread Function ---
-void core_worker_func(int core_id) {
+void core_worker_func(int core_id) { // executes cmds
     while (g_is_running) {
         std::shared_ptr<PCB> my_process = nullptr;
         {
@@ -110,14 +116,21 @@ void core_worker_func(int core_id) {
         }
 
         if (my_process) {
-            // This is the "print command" execution
+            // This is the "print command" execution   REPLACE WITH THE RANDOM COMMANDS THING
             if (my_process->program_counter < my_process->commands.size()) {
                 const std::string& command = my_process->commands[my_process->program_counter];
                 auto now = std::chrono::system_clock::now();
+
+
+
                 my_process->log_file << "(" << format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
                                      << " \"" << command << "\"" << std::endl;
+
+
+
                 my_process->program_counter++;
                 my_process->commands_executed_this_quantum++;
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
 
@@ -181,7 +194,75 @@ void display_processes() {
     std::cout << "-------------------------------------------------------------\n\n";
 }
 
-int main() {
+void declareCommand() {
+    switch (std::rand()%3) {
+        case 0:
+            variable_a = 1;
+        case 1:
+            variable_b = 1;
+        case 2:
+            variable_c = 1;
+    }
+}
+
+void addCommand() {
+
+}
+
+void subtractCommand() {
+
+}
+
+void sleepCommand() {
+
+}
+
+void forCommand() {
+    
+}
+
+int RR() {
+
+    bool schedulerRunning = false;
+    int replaceLoopNum = 1;
+
+    // TODO: process generation should go here i think use a while statement with the config
+    while (schedulerRunning) {
+        std::lock_guard<std::mutex> lock(g_process_mutex);
+        auto pcb = std::make_shared<PCB>(replaceLoopNum); // something has to increment here but we dont have a for loop anymore
+        pcb->start_time = std::chrono::system_clock::now();
+        
+        //generate process
+        std::stringstream command_stream;
+        // do thing here random
+        int instruction = std::rand()%6;
+
+        switch (instruction) {
+            case 0:
+                std::cout << "PRINT COMMAND";
+            case 1:
+                std::cout << "DECLARE COMMAND";
+                declareCommand();
+            case 2:
+                std::cout << "ADD COMMAND";
+                
+            case 3:
+                std::cout << "SUBTRACT COMMAND";
+            case 4:
+                std::cout << "SLEEP COMMAND";
+            case 5:
+                std::cout << "FOR COMMAND";
+        }
+
+        command_stream << "cmd log here";
+
+        // etc etc this part adds the instructions stated into ccommand stream
+        // line after this one pushes the stream into commands in pcb. after that, push the pcb into the ready queue
+    }
+
+
+
+
     std::cout << "OS Emulator with RR Scheduler starting..." << std::endl;
     std::cout << "Type 'screen -ls' to see process status." << std::endl;
     std::cout << "Type 'exit' to terminate." << std::endl;

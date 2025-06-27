@@ -16,12 +16,13 @@ using namespace std;
 bool initFlag = false;
 
 //config parameters
-int CPU  = 0;
-string scheduler = "";
-int qCycles = 0;
-int MIN_INS = 0;
-int MAX_INS = 0;
-int delayPerExec = 0;
+int CPU  = 0; // cpus available [1, 128]
+string scheduler = ""; // fcfs or rr
+int qCycles = 0; // quantum [1, 2^32]
+int processFrequency = 0; // every x cycles, generate a new process for scheduler-start [1, 2^32]
+int MIN_INS = 0; // min instructions per process [1, 2^32]
+int MAX_INS = 0; // max instructions per process [1, 2^32]
+int delayPerExec = 0; // delay between executing next instruction [0, 2^32]
 
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 

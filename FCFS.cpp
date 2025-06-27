@@ -155,7 +155,7 @@ void display_processes() {
     std::cout << "-------------------------------------------------------------\n\n";
 }
 
-int main() {
+int FCFS() {
     std::cout << "OS Emulator with FCFS Scheduler starting..." << std::endl;
     std::cout << "Type 'screen -ls' to see process status." << std::endl;
     std::cout << "Type 'exit' to terminate." << std::endl;
