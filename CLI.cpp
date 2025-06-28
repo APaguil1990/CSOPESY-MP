@@ -244,6 +244,11 @@ void fcfs_displayTest(){
     fcfs_display_processes();
 }
 
+void fcfs_writeTest(){
+    void fcfs_write_processes();
+    fcfs_write_processes();
+}
+
 void rr_nameProcess(std::string processName) {
     void rr_create_process(std::string processName);
     rr_create_process(processName);
@@ -406,7 +411,12 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "report-util"){
-            rr_writeTest();
+            if (scheduler == "rr") {
+                rr_writeTest();
+            } else if (scheduler == "fcfs") {
+                fcfs_writeTest();
+            }
+            
         }
 
         if (cmd == "exit") exit(0);
