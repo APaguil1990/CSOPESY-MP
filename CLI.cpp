@@ -17,19 +17,19 @@ using namespace std;
 bool initFlag = false;
 
 //config parameters
-int CPU  = 0; // cpus available [1, 128]
+int CPU  = 4; // cpus available [1, 128]
 string scheduler = ""; // fcfs or rr
-int qCycles = 0; // quantum [1, 2^32]
-int processFrequency = 0; // every x cycles, generate a new process for scheduler-start [1, 2^32]
-int MIN_INS = 0; // min instructions per process [1, 2^32]
-int MAX_INS = 0; // max instructions per process [1, 2^32]
+int qCycles = 1; // quantum [1, 2^32]
+int processFrequency = 1; // every x cycles, generate a new process for scheduler-start [1, 2^32]
+int MIN_INS = 1; // min instructions per process [1, 2^32]
+int MAX_INS = 100; // max instructions per process [1, 2^32]
 int delayPerExec = 0; // delay between executing next instruction [0, 2^32]
 
 unsigned short variable_a = 0;
 unsigned short variable_b = 0;
 unsigned short variable_c = 0;
 
-int cpuClocks = 0;
+int cpuClocks = 1;
 
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 
@@ -370,7 +370,6 @@ string processCommand(const string& cmd) {
  * @details Handles screen initialization, command processing, and UI updates
 */
 int main() {
-    srand(time(0));
 
     auto manager = ScreenManager::getInstance();
     clearScreen();

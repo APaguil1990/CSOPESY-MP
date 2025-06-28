@@ -11,6 +11,7 @@
 #include <memory>
 #include <atomic>
 #include <sstream>
+#include <random>
 
 #include "config.h"
 
@@ -51,6 +52,9 @@ struct RR_PCB {
         }
     }
 };
+
+std::random_device rd;  // a seed source for the random number engine
+std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
 // --- Shared Data Structures ---
 std::deque<std::shared_ptr<RR_PCB>> rr_g_ready_queue;
@@ -275,44 +279,97 @@ int RR() {
     // --- Create Initial Processes ---
     {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+
+        // while (rr_g_is_running) {
+        //     if (cpuClocks%processFrequency == 0) {
+        //         auto pcb = std::make_shared<RR_PCB>(cpuClocks);
+        //         pcb->start_time = std::chrono::system_clock::now();
+
+        //         std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
+        //         std::uniform_int_distribution<> instruction_rand(0, 5);
+
+        //         int instructionCount = instructionCount_rand(gen);
+
+        //         for (int i = 0; i < instructionCount; i++) {
+        //             std::stringstream rr_command_stream;
+
+        //             int instruction = instruction_rand(gen);
+
+        //             switch (instruction) {
+        //                 case 0: // print
+        //                     rr_command_stream << "Hello world from process p" << cpuClocks << std::endl;
+        //                     pcb->commands.push_back(rr_command_stream.str());
+        //                     break;
+        //                 case 1: // declare
+        //                     rr_command_stream << "declare";
+        //                     pcb->commands.push_back(rr_command_stream.str());
+        //                     break;
+        //                 case 2: // add
+        //                     rr_command_stream << "add";
+        //                     pcb->commands.push_back(rr_command_stream.str());
+        //                     break;
+        //                 case 3: // sub
+        //                     rr_command_stream << "sub";
+        //                     pcb->commands.push_back(rr_command_stream.str());
+        //                     break;
+        //                 case 4: // sleep
+        //                     rr_command_stream << "sleep";
+        //                     pcb->commands.push_back(rr_command_stream.str());
+        //                     break;
+        //                 case 5: // for
+        //                     rr_command_stream << "for";
+        //                     pcb->commands.push_back(rr_command_stream.str());
+        //                     break;
+        //             }
+        //         }
+        //         rr_g_ready_queue.push_back(pcb);
+        //     }
+        // }
+
         for (int i = 1; i <= NUM_PROCESSES; ++i) {
             auto pcb = std::make_shared<RR_PCB>(i);
             pcb->start_time = std::chrono::system_clock::now();
 
-            if (i == 10) {
-                for (int j = 0; j < 50; ++j) {
-                    std::stringstream command_stream;
-                    command_stream << "Hello from process " << i << ", line " << j + 1;
-                    pcb->commands.push_back(command_stream.str());
-                }
-                rr_g_ready_queue.push_back(pcb);
-            }
-            if (i == 7 || i == 8 || i == 9) {
-                for (int j = 0; j < 75; ++j) {
-                    std::stringstream command_stream;
-                    command_stream << "Hello from process " << i << ", line " << j + 1;
-                    pcb->commands.push_back(command_stream.str());
-                }
-                rr_g_ready_queue.push_back(pcb);
-            }
-            if (i == 4 || i == 5 || i == 6) {
-                for (int j = 0; j < 100; ++j) {
-                    std::stringstream command_stream;
-                    command_stream << "Hello from process " << i << ", line " << j + 1;
-                    pcb->commands.push_back(command_stream.str());
-                }
-                rr_g_ready_queue.push_back(pcb);
-            }
-            if (i == 1 || i == 2 || i == 3) {
-                for (int j = 0; j < 125; ++j) {
-                    std::stringstream command_stream;
-                    command_stream << "Hello from process " << i << ", line " << j + 1;
-                    pcb->commands.push_back(command_stream.str());
-                }
-                rr_g_ready_queue.push_back(pcb);
-            }
+            std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
+            std::uniform_int_distribution<> instruction_rand(0, 5);
 
-            
+            int instructionCount = instructionCount_rand(gen);
+
+            for (int j = 0; j < instructionCount; ++j) {
+                std::stringstream rr_command_stream;
+
+                int instruction = instruction_rand(gen);
+
+                switch (instruction) {
+                        case 0: // print
+                            rr_command_stream << "Hello world from process p" << i;
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 1: // declare
+                            rr_command_stream << "declare";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 2: // add
+                            rr_command_stream << "add";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 3: // sub
+                            rr_command_stream << "sub";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 4: // sleep
+                            rr_command_stream << "sleep";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 5: // for
+                            rr_command_stream << "for";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                }
+                cpuClocks++;
+            }
+            rr_g_ready_queue.push_back(pcb);
+
         }
     }
 
