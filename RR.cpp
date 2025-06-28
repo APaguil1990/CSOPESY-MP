@@ -16,7 +16,6 @@
 #include "config.h"
 
 // --- Configuration ---
-const int NUM_CORES = 4;
 const int NUM_PROCESSES = 10;
 const int COMMANDS_PER_PROCESS = 105;
 const int TIME_QUANTUM = 3;
@@ -61,7 +60,7 @@ std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
 // --- Shared Data Structures ---
 std::deque<std::shared_ptr<RR_PCB>> rr_g_ready_queue;
-std::vector<std::shared_ptr<RR_PCB>> rr_g_running_processes(NUM_CORES, nullptr);
+std::vector<std::shared_ptr<RR_PCB>> rr_g_running_processes(CPU_COUNT, nullptr);
 std::vector<std::shared_ptr<RR_PCB>> rr_g_finished_processes;
 
 // --- Synchronization Primitives ---
@@ -132,7 +131,7 @@ void rr_scheduler_thread_func() {
 
         if (!rr_g_is_running) break;
 
-        for (int i = 0; i < NUM_CORES; ++i) {
+        for (int i = 0; i < CPU_COUNT; ++i) {
             if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) {
                 std::shared_ptr<RR_PCB> process = rr_g_ready_queue.front();
                 rr_g_ready_queue.pop_front();
@@ -390,7 +389,7 @@ int RR() {
     // Create scheduler and worker threads
     std::thread scheduler(rr_scheduler_thread_func);
     std::vector<std::thread> core_workers;
-    for (int i = 0; i < NUM_CORES; ++i) {
+    for (int i = 0; i < CPU_COUNT; ++i) {
         core_workers.emplace_back(rr_core_worker_func, i);
     }
     rr_g_scheduler_cv.notify_all();

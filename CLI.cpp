@@ -19,7 +19,7 @@ bool initFlag = false;
 bool process_maker_running = false;
 
 //config parameters
-int CPU_COUNT  = 1; // cpus available [1, 128]
+int CPU_COUNT = 128; // cpus available [1, 128]
 string scheduler = ""; // fcfs or rr
 int qCycles = 1; // quantum [1, 2^32]
 int processFrequency = 1; // every x cycles, generate a new process for scheduler-start [1, 2^32]

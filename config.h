@@ -3,7 +3,7 @@
 
 #include <string>
 
-extern int CPU;
+extern int CPU_COUNT;
 extern std::string scheduler;
 extern int qCycles;
 extern int processFrequency;
