@@ -300,12 +300,14 @@ string processCommand(const string& cmd) {
 
             return "initialization finished";
         }
+
+        //can use the exit command
         if (cmd == "exit") exit(0);
         return "use the 'initialize' command before using other commands";
     }
 
     // Handle screen commands 
-    if (tokens.size() >=3 && tokens[0] == "screen") {
+    if (tokens.size() >=3 && tokens[0] == "screen" && initFlag == true) {
         if (tokens[1] == "-s") {
             manager->createScreen(tokens[2]); 
             return "Created screen: " + tokens[2]; 
@@ -316,6 +318,8 @@ string processCommand(const string& cmd) {
             }
             return "Screen not found: " + tokens[2]; 
         }
+    }else if (tokens.size() >=3 && tokens[0] == "screen" && initFlag == false){
+        return "use the 'initialize' command before using other commands";
     }
 
     // Handle quit 
