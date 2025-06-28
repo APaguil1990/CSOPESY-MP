@@ -75,6 +75,42 @@ std::string rr_format_time(const std::chrono::system_clock::time_point& tp, cons
     return ss.str();
 }
 
+void declareCommand() {
+    std::uniform_int_distribution<> declare_rand(0, 2);
+
+    int declared = declare_rand(gen);
+
+    switch (declared) {
+        case 0:
+            variable_a = 1;
+            break;
+        case 1:
+            variable_b = 1;
+            break;
+        case 2:
+            variable_c = 1;
+            break;
+    }
+}
+
+void addCommand() {
+    variable_a = variable_b + variable_c;
+}
+
+void subtractCommand() {
+    variable_a = variable_b - variable_c;
+}
+
+void sleepCommand() {
+    cpuClocks += 10;
+}
+
+void forCommand() {
+    for (int i; i < 5; i++) {
+        addCommand();
+    }
+}
+
 // --- Scheduler Thread Function ---
 void rr_scheduler_thread_func() {
     while (rr_g_is_running) {
@@ -122,9 +158,39 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 auto now = std::chrono::system_clock::now();
 
 
+                if (command.compare("declare") == 0) {
+                    declareCommand();
+                    
+                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //                      << " \"" << command << "\"" << std::endl;
+                } else if (command.compare("add") == 0) {
+                    addCommand();
 
-                my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                                     << " \"" << command << "\"" << std::endl;
+                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //                      << " \"" << command << "\"" << std::endl;
+                } else if (command.compare("sub") == 0) {
+                    subtractCommand();
+
+                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //                      << " \"" << command << "\"" << std::endl;
+                } else if (command.compare("sleep") == 0) {
+                    sleepCommand();
+
+                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //                      << " \"" << command << "\"" << std::endl;
+                } else if (command.compare("for") == 0) {
+                    forCommand();
+
+                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //                      << " \"" << command << "\"" << std::endl;
+                } else {
+                    my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                                         << " \"" << command << "\"" << std::endl;
+                }
+
+
+                // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                //                      << " \"" << command << "\"" << std::endl;
 
 
 
@@ -194,140 +260,14 @@ void rr_display_processes() {
     std::cout << "-------------------------------------------------------------\n\n";
 }
 
-// void declareCommand() {
-//     switch (std::rand()%3) {
-//         case 0:
-//             variable_a = 1;
-//             break;
-//         case 1:
-//             variable_b = 1;
-//             break;
-//         case 2:
-//             variable_c = 1;
-//             break;
-//     }
-// }
-
-// void addCommand() {
-//     variable_a = variable_b + variable_c;
-// }
-
-// void subtractCommand() {
-//     variable_a = variable_b - variable_c;
-// }
-
-// void sleepCommand() {
-//     cpuClocks += std::rand()%65536;
-// }
-
-// void forCommand() {
-//     std::cout << "idk how to do this";
-// }
-
 int RR() {
-
-    // bool schedulerRunning = false;
-    // int replaceLoopNum = 1;
-
-    // // TODO: process generation should go here i think use a while statement with the config
-    // while (schedulerRunning) {
-    //     std::lock_guard<std::mutex> lock(g_process_mutex);
-    //     auto pcb = std::make_shared<PCB>(replaceLoopNum); // something has to increment here but we dont have a for loop anymore
-    //     pcb->start_time = std::chrono::system_clock::now();
-        
-    //     //generate process
-    //     std::stringstream command_stream;
-    //     // do thing here random
-    //     int instruction = std::rand()%6;
-
-    //     switch (instruction) {
-    //         case 0:
-    //             std::cout << "PRINT COMMAND";
-    //             break;
-    //         case 1:
-    //             std::cout << "DECLARE COMMAND";
-    //             declareCommand();
-    //             break;
-    //         case 2:
-    //             std::cout << "ADD COMMAND";
-    //             addCommand();
-    //             break;
-    //         case 3:
-    //             std::cout << "SUBTRACT COMMAND";
-    //             subtractCommand();
-    //             break;
-    //         case 4:
-    //             std::cout << "SLEEP COMMAND";
-    //             sleepCommand();
-    //             break;
-    //         case 5:
-    //             std::cout << "FOR COMMAND";
-    //             forCommand();
-    //             break;
-    //     }
-
-    //     command_stream << "cmd log here";
-
-    //     // etc etc this part adds the instructions stated into ccommand stream
-    //     // line after this one pushes the stream into commands in pcb. after that, push the pcb into the ready queue
-    // }
-
-
-
-
 
     // --- Create Initial Processes ---
     {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
 
-        // while (rr_g_is_running) {
-        //     if (cpuClocks%processFrequency == 0) {
-        //         auto pcb = std::make_shared<RR_PCB>(cpuClocks);
-        //         pcb->start_time = std::chrono::system_clock::now();
-
-        //         std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
-        //         std::uniform_int_distribution<> instruction_rand(0, 5);
-
-        //         int instructionCount = instructionCount_rand(gen);
-
-        //         for (int i = 0; i < instructionCount; i++) {
-        //             std::stringstream rr_command_stream;
-
-        //             int instruction = instruction_rand(gen);
-
-        //             switch (instruction) {
-        //                 case 0: // print
-        //                     rr_command_stream << "Hello world from process p" << cpuClocks << std::endl;
-        //                     pcb->commands.push_back(rr_command_stream.str());
-        //                     break;
-        //                 case 1: // declare
-        //                     rr_command_stream << "declare";
-        //                     pcb->commands.push_back(rr_command_stream.str());
-        //                     break;
-        //                 case 2: // add
-        //                     rr_command_stream << "add";
-        //                     pcb->commands.push_back(rr_command_stream.str());
-        //                     break;
-        //                 case 3: // sub
-        //                     rr_command_stream << "sub";
-        //                     pcb->commands.push_back(rr_command_stream.str());
-        //                     break;
-        //                 case 4: // sleep
-        //                     rr_command_stream << "sleep";
-        //                     pcb->commands.push_back(rr_command_stream.str());
-        //                     break;
-        //                 case 5: // for
-        //                     rr_command_stream << "for";
-        //                     pcb->commands.push_back(rr_command_stream.str());
-        //                     break;
-        //             }
-        //         }
-        //         rr_g_ready_queue.push_back(pcb);
-        //     }
-        // }
-
         for (int i = 1; i <= NUM_PROCESSES; ++i) {
-            auto pcb = std::make_shared<RR_PCB>(i);
+            auto pcb = std::make_shared<RR_PCB>(cpuClocks); // change cpuclock and i
             pcb->start_time = std::chrono::system_clock::now();
 
             std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
@@ -342,7 +282,7 @@ int RR() {
 
                 switch (instruction) {
                         case 0: // print
-                            rr_command_stream << "Hello world from process p" << i;
+                            rr_command_stream << "Hello world from process p" << cpuClocks << "!";
                             pcb->commands.push_back(rr_command_stream.str());
                             break;
                         case 1: // declare
@@ -385,7 +325,7 @@ int RR() {
 
     // --- Main UI Loop  ---
     std::string command;
-    rr_display_processes();
+    // rr_display_processes();
 
     while (rr_g_is_running) {
         // std::cout << "> ";
