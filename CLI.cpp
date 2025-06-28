@@ -224,13 +224,18 @@ void runRR(){
     RR();
 }
 
-void displayTest(){
+void rr_searchTest(std::string processName) {
+    void rr_search_process(std::string processName);
+    rr_search_process(processName);
+}
+
+void rr_displayTest(){
     void rr_display_processes();
     rr_display_processes();
 }
 
 void nameProcess(std::string processName) {
-    void rr_create_process(std::string procesName);
+    void rr_create_process(std::string processName);
     rr_create_process(processName);
 }
 
@@ -326,12 +331,13 @@ string processCommand(const string& cmd) {
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
                 manager->attachScreen(tokens[2]); 
+                rr_searchTest(tokens[2]);
                 return "";
             } else {
                 return "Screen not found: " + tokens[2]; 
             }
         } else if (tokens[1] == "-ls") {
-            displayTest();
+            rr_displayTest();
             return "";
         }
     }else if (tokens[0] == "screen" && initFlag == false){

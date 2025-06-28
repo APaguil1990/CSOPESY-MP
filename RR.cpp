@@ -217,6 +217,24 @@ void rr_core_worker_func(int core_id) { // executes cmds
     }
 }
 
+void rr_search_process(std::string process_search) {
+    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+    std::cout << "\n-------------------------------------------------------------\n";
+
+    for (const auto& p : rr_g_ready_queue) {
+        std::stringstream tempString;
+        tempString << "process" << p->id;
+
+        if (process_search.compare(p->processName) == 0 || process_search.compare(tempString.str()) == 0) {
+            for(const std::string& line : p->log_file) {
+                std::cout << line << std::endl;
+            }
+        }
+    }
+    std::cout << "-------------------------------------------------------------\n\n";
+    std::cout << process_search;
+}
+
 // --- UI Function to Display Process Lists ---
 void rr_display_processes() {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
@@ -232,7 +250,7 @@ void rr_display_processes() {
                       << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
         }
         if (p->processName == "") {
-            std::cout << "TEST THIS HAS NO NAME" << std::endl;
+            std::cout << "TEST THIS HAS NO NAME" << std::endl;                                           // delete these afterwards
         } else if (p->processName != "") {
             std::cout << "ALARM LARLMARLMARLMARLMAMRL THIS HAS A NAME THATS WRONG" << std::endl;
         }
@@ -279,7 +297,7 @@ void rr_create_process(std::string processName) {
 
             switch (instruction) {
                 case 0: // print
-                    rr_command_stream << "Hello world from process p" << cpuClocks << "!";
+                    rr_command_stream << "Hello world from process p" << pcb->id << "!";
                     pcb->commands.push_back(rr_command_stream.str());
                     break;
                 case 1: // declare
@@ -402,6 +420,6 @@ int RR() {
     for (auto& worker : core_workers) {
         worker.join();
     }
-
+    
     return 0;
 }
