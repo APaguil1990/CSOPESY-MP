@@ -13,6 +13,7 @@
 #include <sstream>
 #include <random>
 
+#include "ScreenManager.h"
 #include "config.h"
 
 // --- Configuration ---
@@ -39,24 +40,12 @@ struct RR_PCB {
     std::chrono::system_clock::time_point finish_time;
     int assigned_core = -1;
     std::vector<std::string> log_file;
-
-    // RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
-    //     std::stringstream ss;
-    //     ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
-    //     log_file.open(ss.str());
-    // }
-
-    // ~RR_PCB() {
-    //     if (log_file.is_open()) {
-    //         log_file.close();
-    //     }
-    // }
 };
 
 
 
-std::random_device rd;  // a seed source for the random number engine
-std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+std::random_device rr_rd;  // a seed source for the random number engine
+std::mt19937 rr_gen(rr_rd()); // mersenne_twister_engine seeded with rd()
 
 // --- Shared Data Structures ---
 std::deque<std::shared_ptr<RR_PCB>> rr_g_ready_queue;
@@ -77,10 +66,10 @@ std::string rr_format_time(const std::chrono::system_clock::time_point& tp, cons
     return ss.str();
 }
 
-void declareCommand() {
+void rr_declareCommand() {
     std::uniform_int_distribution<> declare_rand(0, 2);
 
-    int declared = declare_rand(gen);
+    int declared = declare_rand(rr_gen);
 
     switch (declared) {
         case 0:
@@ -95,21 +84,21 @@ void declareCommand() {
     }
 }
 
-void addCommand() {
+void rr_addCommand() {
     variable_a = variable_b + variable_c;
 }
 
-void subtractCommand() {
+void rr_subtractCommand() {
     variable_a = variable_b - variable_c;
 }
 
-void sleepCommand() {
+void rr_sleepCommand() {
     cpuClocks += 10;
 }
 
-void forCommand() {
+void rr_forCommand() {
     for (int i; i < 5; i++) {
-        addCommand();
+        rr_addCommand();
     }
 }
 
@@ -163,19 +152,19 @@ void rr_core_worker_func(int core_id) { // executes cmds
 
 
                 if (command.compare("declare") == 0) {
-                    declareCommand();
+                    rr_declareCommand();
                     
                 } else if (command.compare("add") == 0) {
-                    addCommand();
+                    rr_addCommand();
 
                 } else if (command.compare("sub") == 0) {
-                    subtractCommand();
+                    rr_subtractCommand();
 
                 } else if (command.compare("sleep") == 0) {
-                    sleepCommand();
+                    rr_sleepCommand();
 
                 } else if (command.compare("for") == 0) {
-                    forCommand();
+                    rr_forCommand();
 
 
                 } else {
@@ -289,11 +278,11 @@ void rr_create_process(std::string processName) {
         std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
         std::uniform_int_distribution<> instruction_rand(0, 5);
 
-        int instructionCount = instructionCount_rand(gen);
+        int instructionCount = instructionCount_rand(rr_gen);
 
         for (int j = 0; j < instructionCount; ++j) {
             std::stringstream rr_command_stream;
-            int instruction = instruction_rand(gen);
+            int instruction = instruction_rand(rr_gen);
 
             switch (instruction) {
                 case 0: // print
@@ -332,8 +321,9 @@ void rr_create_process(std::string processName) {
 }
 
 // Function that creates processes
-void create_processes() {
+void rr_create_processes() {
     process_maker_running = true;
+    auto rr_manager = ScreenManager::getInstance();
 
     // Process Generation Loop
     while (rr_g_is_running) {
@@ -349,11 +339,11 @@ void create_processes() {
                 std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
                 std::uniform_int_distribution<> instruction_rand(0, 5);
 
-                int instructionCount = instructionCount_rand(gen);
+                int instructionCount = instructionCount_rand(rr_gen);
 
                 for (int j = 0; j < instructionCount; ++j) {
                     std::stringstream rr_command_stream;
-                    int instruction = instruction_rand(gen);
+                    int instruction = instruction_rand(rr_gen);
 
                     switch (instruction) {
                         case 0: // print
@@ -413,7 +403,7 @@ int RR() {
     rr_g_scheduler_cv.notify_all();
 
     // Start process creation
-    create_processes();
+    rr_create_processes();
 
     // Shutdown
     scheduler.join();

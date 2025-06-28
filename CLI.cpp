@@ -234,7 +234,12 @@ void rr_displayTest(){
     rr_display_processes();
 }
 
-void nameProcess(std::string processName) {
+void fcfs_displayTest(){
+    void fcfs_display_processes();
+    fcfs_display_processes();
+}
+
+void rr_nameProcess(std::string processName) {
     void rr_create_process(std::string processName);
     rr_create_process(processName);
 }
@@ -323,7 +328,7 @@ string processCommand(const string& cmd) {
         if (tokens[1] == "-s" ) {
             if (process_maker_running) {
                 manager->createScreen(tokens[2]); 
-                nameProcess(tokens[2]);
+                rr_nameProcess(tokens[2]);
                 return "Created screen: " + tokens[2];
             } else {
                 return "scheduler has not been started yet!";
@@ -337,7 +342,11 @@ string processCommand(const string& cmd) {
                 return "Screen not found: " + tokens[2]; 
             }
         } else if (tokens[1] == "-ls") {
-            rr_displayTest();
+            if (scheduler == "fcfs") {
+                fcfs_displayTest();
+            } else if (scheduler == "rr") {
+                rr_displayTest();
+            }
             return "";
         }
     }else if (tokens[0] == "screen" && initFlag == false){
