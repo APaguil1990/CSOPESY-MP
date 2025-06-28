@@ -222,6 +222,11 @@ void runRR(){
     RR();
 }
 
+void displayTest(){
+    void rr_display_processes();
+    rr_display_processes();
+}
+
 /**
  * Checks for the config.txt file and reads its contents to get values
  * @return true or false

@@ -38,19 +38,19 @@ struct RR_PCB {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point finish_time;
     int assigned_core = -1;
-    std::ofstream log_file;
+    std::vector<std::string> log_file;
 
-    RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
-        std::stringstream ss;
-        ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
-        log_file.open(ss.str());
-    }
+    // RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
+    //     std::stringstream ss;
+    //     ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
+    //     log_file.open(ss.str());
+    // }
 
-    ~RR_PCB() {
-        if (log_file.is_open()) {
-            log_file.close();
-        }
-    }
+    // ~RR_PCB() {
+    //     if (log_file.is_open()) {
+    //         log_file.close();
+    //     }
+    // }
 };
 
 std::random_device rd;  // a seed source for the random number engine
@@ -142,6 +142,8 @@ void rr_scheduler_thread_func() {
     }
 }
 
+
+
 // --- CPU Worker Thread Function ---
 void rr_core_worker_func(int core_id) { // executes cmds
     while (rr_g_is_running) {
@@ -161,36 +163,25 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 if (command.compare("declare") == 0) {
                     declareCommand();
                     
-                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                    //                      << " \"" << command << "\"" << std::endl;
                 } else if (command.compare("add") == 0) {
                     addCommand();
 
-                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                    //                      << " \"" << command << "\"" << std::endl;
                 } else if (command.compare("sub") == 0) {
                     subtractCommand();
 
-                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                    //                      << " \"" << command << "\"" << std::endl;
                 } else if (command.compare("sleep") == 0) {
                     sleepCommand();
 
-                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                    //                      << " \"" << command << "\"" << std::endl;
                 } else if (command.compare("for") == 0) {
                     forCommand();
 
-                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                    //                      << " \"" << command << "\"" << std::endl;
+
                 } else {
-                    my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                                         << " \"" << command << "\"" << std::endl;
+                    std::ostringstream tempString;
+                    tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                               << " \"" << command << "\"" << std::endl;
+                    my_process->log_file.push_back(tempString.str());
                 }
-
-
-                // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                //                      << " \"" << command << "\"" << std::endl;
 
 
 
@@ -261,13 +252,21 @@ void rr_display_processes() {
 }
 
 int RR() {
+    std::thread scheduler(rr_scheduler_thread_func);
+    std::vector<std::thread> core_workers;
+    for (int i = 0; i < NUM_CORES; ++i) {
+        core_workers.emplace_back(rr_core_worker_func, i);
+    }
+    rr_g_scheduler_cv.notify_all();
 
-    // --- Create Initial Processes ---
-    {
-        std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-
-        for (int i = 1; i <= NUM_PROCESSES; ++i) {
-            auto pcb = std::make_shared<RR_PCB>(cpuClocks); // change cpuclock and i
+    // --- Process Generation and Execution Loop ---
+    while (rr_g_is_running) {
+        // Create a new process
+        std::shared_ptr<RR_PCB> pcb;
+        {
+            std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+            
+            pcb = std::make_shared<RR_PCB>(cpuClocks);
             pcb->start_time = std::chrono::system_clock::now();
 
             std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
@@ -277,60 +276,49 @@ int RR() {
 
             for (int j = 0; j < instructionCount; ++j) {
                 std::stringstream rr_command_stream;
-
                 int instruction = instruction_rand(gen);
 
                 switch (instruction) {
-                        case 0: // print
-                            rr_command_stream << "Hello world from process p" << cpuClocks << "!";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 1: // declare
-                            rr_command_stream << "declare";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 2: // add
-                            rr_command_stream << "add";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 3: // sub
-                            rr_command_stream << "sub";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 4: // sleep
-                            rr_command_stream << "sleep";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 5: // for
-                            rr_command_stream << "for";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
+                    case 0: // print
+                        rr_command_stream << "Hello world from process p" << cpuClocks << "!";
+                        pcb->commands.push_back(rr_command_stream.str());
+                        break;
+                    case 1: // declare
+                        rr_command_stream << "declare";
+                        pcb->commands.push_back(rr_command_stream.str());
+                        break;
+                    case 2: // add
+                        rr_command_stream << "add";
+                        pcb->commands.push_back(rr_command_stream.str());
+                        break;
+                    case 3: // sub
+                        rr_command_stream << "sub";
+                        pcb->commands.push_back(rr_command_stream.str());
+                        break;
+                    case 4: // sleep
+                        rr_command_stream << "sleep";
+                        pcb->commands.push_back(rr_command_stream.str());
+                        break;
+                    case 5: // for
+                        rr_command_stream << "for";
+                        pcb->commands.push_back(rr_command_stream.str());
+                        break;
                 }
                 cpuClocks++;
             }
+            
             rr_g_ready_queue.push_back(pcb);
-
         }
-    }
-
-
-
-    // --- Launch Threads ---
-    std::thread scheduler(rr_scheduler_thread_func);
-    std::vector<std::thread> core_workers;
-    for (int i = 0; i < NUM_CORES; ++i) {
-        core_workers.emplace_back(rr_core_worker_func, i);
-    }
-    rr_g_scheduler_cv.notify_all();
-
-    // --- Main UI Loop  ---
-    std::string command;
-    // rr_display_processes();
-
-    while (rr_g_is_running) {
-        // std::cout << "> ";
-        // std::getline(std::cin, command);
         
+        // Notify scheduler that a new process is available
+        rr_g_scheduler_cv.notify_one();
+
+        // Add some delay between process creation if needed
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // Check for user input
+        std::string command;
+
         if (command == "screen -ls") {
             rr_display_processes();
         } else if (command == "exit") {
@@ -339,6 +327,7 @@ int RR() {
         } else if (!command.empty()) {
             std::cout << "Unknown command: '" << command << "'" << std::endl;
         }
+        
     }
 
     // --- Shutdown ---
