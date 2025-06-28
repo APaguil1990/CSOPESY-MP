@@ -19,7 +19,7 @@ bool initFlag = false;
 bool process_maker_running = false;
 
 //config parameters
-int CPU  = 4; // cpus available [1, 128]
+int CPU_COUNT  = 1; // cpus available [1, 128]
 string scheduler = ""; // fcfs or rr
 int qCycles = 1; // quantum [1, 2^32]
 int processFrequency = 1; // every x cycles, generate a new process for scheduler-start [1, 2^32]
@@ -260,7 +260,7 @@ bool readConfig(){
             
             // Assign values to corresponding variables based on the key
             if (key == "num-cpu") {
-                CPU = std::stoi(value);
+                CPU_COUNT = std::stoi(value);
             } else if (key == "scheduler") {
                 scheduler = value;
             } else if (key == "quantum-cycles") {
@@ -376,7 +376,8 @@ string processCommand(const string& cmd) {
 
         if (cmd == "scheduler-stop"){
             //stop the scheduler thread
-            
+            process_maker_running = false;
+
             return "scheduler stopped";
         }
 

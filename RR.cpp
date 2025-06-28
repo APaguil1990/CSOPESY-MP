@@ -314,7 +314,80 @@ void rr_create_process(std::string processName) {
     rr_g_scheduler_cv.notify_one();
 }
 
+// Function that creates processes
+void create_processes() {
+    process_maker_running = true;
+
+    // Process Generation Loop
+    while (rr_g_is_running) {
+        if (process_maker_running) {
+            // Create a new process
+            std::shared_ptr<RR_PCB> pcb;
+            {
+                std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+                
+                pcb = std::make_shared<RR_PCB>(cpuClocks);
+                pcb->start_time = std::chrono::system_clock::now();
+
+                std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
+                std::uniform_int_distribution<> instruction_rand(0, 5);
+
+                int instructionCount = instructionCount_rand(gen);
+
+                for (int j = 0; j < instructionCount; ++j) {
+                    std::stringstream rr_command_stream;
+                    int instruction = instruction_rand(gen);
+
+                    switch (instruction) {
+                        case 0: // print
+                            rr_command_stream << "Hello world from process p" << cpuClocks << "!";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 1: // declare
+                            rr_command_stream << "declare";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 2: // add
+                            rr_command_stream << "add";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 3: // sub
+                            rr_command_stream << "sub";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 4: // sleep
+                            rr_command_stream << "sleep";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                        case 5: // for
+                            rr_command_stream << "for";
+                            pcb->commands.push_back(rr_command_stream.str());
+                            break;
+                    }
+                    cpuClocks++;
+                }
+                
+                rr_g_ready_queue.push_back(pcb);
+            }
+            
+            // Notify scheduler that a new process is available
+            rr_g_scheduler_cv.notify_one();
+        }
+
+        // Add some delay between process creation if needed
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // Check if we should stop
+        if (rr_g_ready_queue.empty() && rr_g_running_processes.empty()) {
+            rr_g_is_running = false;
+            rr_g_scheduler_cv.notify_all();
+        }
+    }
+}
+
+// Function that starts and runs the processes
 int RR() {
+    // Create scheduler and worker threads
     std::thread scheduler(rr_scheduler_thread_func);
     std::vector<std::thread> core_workers;
     for (int i = 0; i < NUM_CORES; ++i) {
@@ -322,83 +395,14 @@ int RR() {
     }
     rr_g_scheduler_cv.notify_all();
 
-    process_maker_running = true;
+    // Start process creation
+    create_processes();
 
-    // --- Process Generation and Execution Loop ---
-    while (rr_g_is_running) {
-        if (process_maker_running) {
-
-        // Create a new process
-        std::shared_ptr<RR_PCB> pcb;
-        {
-            std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-            
-            pcb = std::make_shared<RR_PCB>(cpuClocks);
-            pcb->start_time = std::chrono::system_clock::now();
-
-            std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
-            std::uniform_int_distribution<> instruction_rand(0, 5);
-
-            int instructionCount = instructionCount_rand(gen);
-
-            for (int j = 0; j < instructionCount; ++j) {
-                std::stringstream rr_command_stream;
-                int instruction = instruction_rand(gen);
-
-                switch (instruction) {
-                    case 0: // print
-                        rr_command_stream << "Hello world from process p" << cpuClocks << "!";
-                        pcb->commands.push_back(rr_command_stream.str());
-                        break;
-                    case 1: // declare
-                        rr_command_stream << "declare";
-                        pcb->commands.push_back(rr_command_stream.str());
-                        break;
-                    case 2: // add
-                        rr_command_stream << "add";
-                        pcb->commands.push_back(rr_command_stream.str());
-                        break;
-                    case 3: // sub
-                        rr_command_stream << "sub";
-                        pcb->commands.push_back(rr_command_stream.str());
-                        break;
-                    case 4: // sleep
-                        rr_command_stream << "sleep";
-                        pcb->commands.push_back(rr_command_stream.str());
-                        break;
-                    case 5: // for
-                        rr_command_stream << "for";
-                        pcb->commands.push_back(rr_command_stream.str());
-                        break;
-                }
-                cpuClocks++;
-            }
-            
-            rr_g_ready_queue.push_back(pcb);
-        }
-        }
-        // Notify scheduler that a new process is available
-        rr_g_scheduler_cv.notify_one();
-
-        // Add some delay between process creation if needed
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        // Check for user input
-
-        if (rr_g_ready_queue.empty() && rr_g_running_processes.empty()) {
-            rr_g_is_running = false;
-            rr_g_scheduler_cv.notify_all();
-        }
-        
-    }
-
-    // --- Shutdown ---
-    // std::cout << "Shutting down. Waiting for threads to complete..." << std::endl;
+    // Shutdown
     scheduler.join();
     for (auto& worker : core_workers) {
         worker.join();
     }
-    // std::cout << "Emulator terminated." << std::endl;
 
     return 0;
 }
