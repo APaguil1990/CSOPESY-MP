@@ -3,13 +3,35 @@
 */
 #include "ScreenManager.h"
 #include <iostream> 
+#include <fstream>
 #include <string> 
 #include <windows.h> 
 #include <vector> 
 #include <algorithm> 
+#include <thread>
 #include <sstream>
+#include <ctime>
 
-using namespace std; 
+using namespace std;
+
+bool initFlag = false;
+
+bool process_maker_running = false;
+
+//config parameters
+int CPU_COUNT  = 1; // cpus available [1, 128]
+string scheduler = ""; // fcfs or rr
+int qCycles = 1; // quantum [1, 2^32]
+int processFrequency = 1; // every x cycles, generate a new process for scheduler-start [1, 2^32]
+int MIN_INS = 1; // min instructions per process [1, 2^32]
+int MAX_INS = 100; // max instructions per process [1, 2^32]
+int delayPerExec = 0; // delay between executing next instruction [0, 2^32]
+
+unsigned short variable_a = 0;
+unsigned short variable_b = 0;
+unsigned short variable_c = 0;
+
+int cpuClocks = 1;
 
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 
@@ -179,6 +201,87 @@ vector<string> tokenize(const string& input) {
 }
 
 /**
+ * Runs the marquee console
+ */
+void runMarquee(){
+    void marquee();
+    marquee();
+}
+
+/**
+ * Runs the FCFS Scheduler
+ */
+void runFCFS(){
+    void FCFS();
+    FCFS();
+}
+
+/**
+ * Runs the RR Scheduler
+ */
+void runRR(){
+    void RR();
+    RR();
+}
+
+void displayTest(){
+    void rr_display_processes();
+    rr_display_processes();
+}
+
+void nameProcess(std::string processName) {
+    void rr_create_process(std::string procesName);
+    rr_create_process(processName);
+}
+
+/**
+ * Checks for the config.txt file and reads its contents to get values
+ * @return true or false
+ */
+bool readConfig(){
+    vector<string> values;
+
+    ifstream configFile("config.txt");
+            
+    if(!configFile.is_open()){
+        return false;
+    }
+
+    string line;
+    while(getline(configFile,line)){
+        istringstream iss(line);
+        string key, value;
+        // Read key and value from the line
+        if (std::getline(iss, key, ' ') && std::getline(iss, value)) {
+            // Remove quotes from the value if present
+            if (value.front() == '"' && value.back() == '"') {
+                value = value.substr(1, value.size() - 2);
+            }
+            
+            // Assign values to corresponding variables based on the key
+            if (key == "num-cpu") {
+                CPU_COUNT = std::stoi(value);
+            } else if (key == "scheduler") {
+                scheduler = value;
+            } else if (key == "quantum-cycles") {
+                qCycles = std::stoi(value);
+            } else if (key == "min-ins") {
+                MIN_INS = std::stoi(value);
+            } else if (key == "max-ins") {
+                MAX_INS = std::stoi(value);
+            } else if (key == "delay-per-exec") {
+                delayPerExec = std::stoi(value);
+            }
+        }
+    }
+    configFile.close();
+    initFlag = true;
+    return true;
+}
+
+
+
+/**
  * Processes user commands and return response 
  * @param cmd Input command string 
  * @return Response messages or empty string for clear 
@@ -188,19 +291,51 @@ vector<string> tokenize(const string& input) {
 string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 
     vector<string> tokens = tokenize(cmd);
+    
+    vector<string> validCommands = {
+        "initialize", "screen", "scheduler-start", "marquee",
+        "scheduler-stop", "report-util", "clear", "exit"
+    };
+
+    //handle initialization before other commands
+    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == false){
+        if (cmd == "initialize"){
+            //read the config file
+            if (readConfig() == false){
+                return "initialization failed, please try again";
+            };
+
+            return "initialization finished";
+        }
+
+        //can use the exit command
+        if (cmd == "exit") exit(0);
+        return "use the 'initialize' command before using other commands";
+    }
 
     // Handle screen commands 
-    if (tokens.size() >=3 && tokens[0] == "screen") {
-        if (tokens[1] == "-s") {
-            manager->createScreen(tokens[2]); 
-            return "Created screen: " + tokens[2]; 
+    if (tokens[0] == "screen" && initFlag == true) {
+        if (tokens[1] == "-s" ) {
+            if (process_maker_running) {
+                manager->createScreen(tokens[2]); 
+                nameProcess(tokens[2]);
+                return "Created screen: " + tokens[2];
+            } else {
+                return "scheduler has not been started yet!";
+            }
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
                 manager->attachScreen(tokens[2]); 
                 return "";
+            } else {
+                return "Screen not found: " + tokens[2]; 
             }
-            return "Screen not found: " + tokens[2]; 
+        } else if (tokens[1] == "-ls") {
+            displayTest();
+            return "";
         }
+    }else if (tokens[0] == "screen" && initFlag == false){
+        return "use the 'initialize' command before using other commands";
     }
 
     // Handle quit 
@@ -210,20 +345,49 @@ string processCommand(const string& cmd) {
         initializePositions(); 
         return "Returned to main menu";
     }
-    
-    vector<string> validCommands = {
-        "initialize", "screen", "scheduler-test", 
-        "scheduler-stop", "report-util", "clear", "exit"
-    };
 
-    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end()) {
+    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == true) {
         if (cmd == "clear") {
             clearScreen();
             return "SCREEN CLEARED"; // Special flag
         }
+        
+        if (cmd == "marquee"){
+            thread marquee(runMarquee);
+            marquee.join();
+            clearScreen();
+            return "marquee console finished";
+        }
+
+        if (cmd == "scheduler-start"){
+            //start the scheduler thread
+            if (scheduler == "fcfs"){
+               thread schedulerFCFS(runFCFS);
+               schedulerFCFS.detach();
+               return "running FCFS scheduler";
+            }else if (scheduler == "rr"){
+               thread schedulerRR(runRR);
+               schedulerRR.detach();
+               return "running RR scheduler";
+            }
+            //if scheduler does not work
+            return "error: cannot define scheduler";
+        }
+
+        if (cmd == "scheduler-stop"){
+            //stop the scheduler thread
+            process_maker_running = false;
+
+            return "scheduler stopped";
+        }
+
+        if (cmd == "initialize"){
+            return "initialize has already been used";
+        }
+
         if (cmd == "exit") exit(0);
-        return "'" + cmd + "' command recognized. Doing something.";
-    } 
+    }
+    //If command was not recognized
     return "Unknown command: " + cmd;
 }
 
@@ -232,6 +396,7 @@ string processCommand(const string& cmd) {
  * @details Handles screen initialization, command processing, and UI updates
 */
 int main() {
+
     auto manager = ScreenManager::getInstance();
     clearScreen();
 

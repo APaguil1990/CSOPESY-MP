@@ -366,7 +366,7 @@ void MarqueeConsole::run() {
     std::cout << std::endl << std::flush; 
 }
 
-int main() {
+int marquee() {
     try {
         MarqueeConsole console; 
         console.run(); 
