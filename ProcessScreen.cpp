@@ -36,7 +36,7 @@ void ProcessScreen::display() const {
     std::cout << std::string(width, '=') << "\n\n";
 
     // Static progress display
-    std::cout << "Progress: 0/1000 (0%)\n" << std::endl;
+    // std::cout << "Progress: 0/1000 (0%)\n" << std::endl;
 }
 
 // void ProcessScreen::run() {

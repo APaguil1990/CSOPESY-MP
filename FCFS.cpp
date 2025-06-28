@@ -30,6 +30,7 @@ enum class ProcessState {
 // --- Process Control Block (PCB) ---
 struct FCFS_PCB {
     int id;
+    std::string processName = "";
     ProcessState state;
     std::vector<std::string> commands;
     size_t program_counter = 0;
@@ -257,6 +258,63 @@ void fcfs_write_processes() {
     outfile.close();
 }
 
+
+void fcfs_create_process(std::string processName) {
+    // Create a new process
+    std::shared_ptr<FCFS_PCB> pcb;
+    {
+        std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+        
+        pcb = std::make_shared<FCFS_PCB>(cpuClocks);
+        pcb->start_time = std::chrono::system_clock::now();
+        pcb->processName = processName;
+
+        std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
+        std::uniform_int_distribution<> instruction_rand(0, 5);
+
+        int instructionCount = instructionCount_rand(gen);
+
+        for (int j = 0; j < instructionCount; ++j) {
+            std::stringstream fcfs_command_stream;
+            int instruction = instruction_rand(gen);
+
+            switch (instruction) {
+                case 0: // print
+                    fcfs_command_stream << "Hello world from process " << pcb->processName << "!";
+                    pcb->commands.push_back(fcfs_command_stream.str());
+                    break;
+                case 1: // declare
+                    fcfs_command_stream << "declare";
+                    pcb->commands.push_back(fcfs_command_stream.str());
+                    break;
+                case 2: // add
+                    fcfs_command_stream << "add";
+                    pcb->commands.push_back(fcfs_command_stream.str());
+                    break;
+                case 3: // sub
+                    fcfs_command_stream << "sub";
+                    pcb->commands.push_back(fcfs_command_stream.str());
+                    break;
+                case 4: // sleep
+                    fcfs_command_stream << "sleep";
+                    pcb->commands.push_back(fcfs_command_stream.str());
+                    break;
+                case 5: // for
+                    fcfs_command_stream << "for";
+                    pcb->commands.push_back(fcfs_command_stream.str());
+                    break;
+            }
+            cpuClocks++;
+        }
+        
+        fcfs_g_ready_queue.push_back(pcb);
+    }
+    
+    // Notify scheduler that a new process is available
+    fcfs_g_scheduler_cv.notify_one();
+}
+
+
 // Function that creates processes
 void fcfs_create_processes() {
     process_maker_running = true;
@@ -272,6 +330,11 @@ void fcfs_create_processes() {
                 
                 pcb = std::make_shared<FCFS_PCB>(cpuClocks);
                 pcb->start_time = std::chrono::system_clock::now();
+
+                std::stringstream tempString;
+                tempString << "process" << pcb->id;
+
+                pcb->processName = tempString.str();
 
                 std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
                 std::uniform_int_distribution<> instruction_rand(0, 5);

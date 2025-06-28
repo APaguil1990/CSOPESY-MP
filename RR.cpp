@@ -319,7 +319,7 @@ void rr_create_process(std::string processName) {
 
             switch (instruction) {
                 case 0: // print
-                    rr_command_stream << "Hello world from process p" << pcb->id << "!";
+                    rr_command_stream << "Hello world from process " << pcb->processName << "!";
                     pcb->commands.push_back(rr_command_stream.str());
                     break;
                 case 1: // declare
@@ -368,6 +368,11 @@ void rr_create_processes() {
                 
                 pcb = std::make_shared<RR_PCB>(cpuClocks);
                 pcb->start_time = std::chrono::system_clock::now();
+
+                std::stringstream tempString;
+                tempString << "process" << pcb->id;
+
+                pcb->processName = tempString.str();
 
                 std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
                 std::uniform_int_distribution<> instruction_rand(0, 5);
