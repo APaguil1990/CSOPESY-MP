@@ -31,6 +31,7 @@ enum class ProcessState {
 // --- Process Control Block (PCB) ---
 struct RR_PCB {
     int id;
+    std::string processName = "";
     int commands_executed_this_quantum;
     ProcessState state;
     std::vector<std::string> commands;
@@ -229,6 +230,11 @@ void rr_display_processes() {
                       << "\tCore: " << p->assigned_core
                       << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
         }
+        if (p->processName == "") {
+            std::cout << "TEST THIS HAS NO NAME" << std::endl;
+        } else if (p->processName != "") {
+            std::cout << "ALARM LARLMARLMARLMARLMAMRL THIS HAS A NAME THATS WRONG" << std::endl;
+        }
     }
 
     std::cout << "\nRunning processes:\n";
@@ -249,6 +255,61 @@ void rr_display_processes() {
                   << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
     }
     std::cout << "-------------------------------------------------------------\n\n";
+}
+
+void rr_create_process(std::string processName) {
+    // Create a new process
+    std::shared_ptr<RR_PCB> pcb;
+    {
+        std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+        
+        pcb = std::make_shared<RR_PCB>(cpuClocks);
+        pcb->start_time = std::chrono::system_clock::now();
+        pcb->processName = processName;
+
+        std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
+        std::uniform_int_distribution<> instruction_rand(0, 5);
+
+        int instructionCount = instructionCount_rand(gen);
+
+        for (int j = 0; j < instructionCount; ++j) {
+            std::stringstream rr_command_stream;
+            int instruction = instruction_rand(gen);
+
+            switch (instruction) {
+                case 0: // print
+                    rr_command_stream << "Hello world from process p" << cpuClocks << "!";
+                    pcb->commands.push_back(rr_command_stream.str());
+                    break;
+                case 1: // declare
+                    rr_command_stream << "declare";
+                    pcb->commands.push_back(rr_command_stream.str());
+                    break;
+                case 2: // add
+                    rr_command_stream << "add";
+                    pcb->commands.push_back(rr_command_stream.str());
+                    break;
+                case 3: // sub
+                    rr_command_stream << "sub";
+                    pcb->commands.push_back(rr_command_stream.str());
+                    break;
+                case 4: // sleep
+                    rr_command_stream << "sleep";
+                    pcb->commands.push_back(rr_command_stream.str());
+                    break;
+                case 5: // for
+                    rr_command_stream << "for";
+                    pcb->commands.push_back(rr_command_stream.str());
+                    break;
+            }
+            cpuClocks++;
+        }
+        
+        rr_g_ready_queue.push_back(pcb);
+    }
+    
+    // Notify scheduler that a new process is available
+    rr_g_scheduler_cv.notify_one();
 }
 
 int RR() {

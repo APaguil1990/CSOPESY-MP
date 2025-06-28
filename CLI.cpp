@@ -227,6 +227,11 @@ void displayTest(){
     rr_display_processes();
 }
 
+void nameProcess(std::string processName) {
+    void rr_create_process(std::string procesName);
+    rr_create_process(processName);
+}
+
 /**
  * Checks for the config.txt file and reads its contents to get values
  * @return true or false
@@ -305,9 +310,10 @@ string processCommand(const string& cmd) {
     }
 
     // Handle screen commands 
-    if (tokens.size() >=3 && tokens[0] == "screen") {
+    if (tokens[0] == "screen") {
         if (tokens[1] == "-s") {
             manager->createScreen(tokens[2]); 
+            nameProcess(tokens[2]);
             return "Created screen: " + tokens[2]; 
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
@@ -315,6 +321,9 @@ string processCommand(const string& cmd) {
                 return "";
             }
             return "Screen not found: " + tokens[2]; 
+        } else if (tokens[1] == "-ls") {
+            displayTest();
+            return "";
         }
     }
 
