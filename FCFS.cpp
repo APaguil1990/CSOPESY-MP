@@ -192,21 +192,10 @@ void fcfs_display_processes() {
     std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
 
-    if (!fcfs_g_running_processes.empty()) {
-        std::cout << "CPU Utilization: 100%" << std::endl;
-    } else {
+    if (fcfs_g_running_processes[0] == nullptr) {
         std::cout << "CPU Utilization: 0%" << std::endl;
-    }
-    
-
-    std::cout << "Process Queue:\n";
-    for (const auto& p : fcfs_g_ready_queue) {
-        if (p) {
-            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
-                      << " (" << fcfs_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
-                      << "\tCore: " << p->assigned_core
-                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
-        }
+    } else {
+        std::cout << "CPU Utilization: 100%" << std::endl;
     }
 
     std::cout << "Running processes:\n";
@@ -227,6 +216,45 @@ void fcfs_display_processes() {
                   << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
     }
     std::cout << "-------------------------------------------------------------\n\n";
+}
+
+void fcfs_write_processes() {
+    std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+    std::ofstream outfile("csopesy-log.txt", std::ios::app); // Open in append mode
+    
+    if (!outfile.is_open()) {
+        std::cerr << "Error: Unable to open file " << "csopesy-log.txt" << " for writing." << std::endl;
+        return;
+    }
+
+    outfile << "\n-------------------------------------------------------------\n";
+
+    if (fcfs_g_running_processes[0] == nullptr) {
+        outfile << "CPU Utilization: 0%" << std::endl;
+    } else {
+        outfile << "CPU Utilization: 100%" << std::endl;
+    }
+
+    outfile << "\nRunning processes:\n";
+    for (const auto& p : fcfs_g_running_processes) {
+        if (p) {
+            outfile << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                  << " (" << fcfs_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                  << "\tCore: " << p->assigned_core
+                  << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+
+    outfile << "\nFinished processes:\n";
+    for (const auto& p : fcfs_g_finished_processes) {
+        outfile << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+              << " (" << fcfs_format_time(p->finish_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+              << "\tFinished"
+              << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+    }
+    outfile << "-------------------------------------------------------------\n\n";
+    
+    outfile.close();
 }
 
 // Function that creates processes

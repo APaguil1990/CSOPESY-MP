@@ -234,6 +234,11 @@ void rr_displayTest(){
     rr_display_processes();
 }
 
+void rr_writeTest(){
+    void rr_write_processes();
+    rr_write_processes();
+}
+
 void fcfs_displayTest(){
     void fcfs_display_processes();
     fcfs_display_processes();
@@ -401,7 +406,7 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "report-util"){
-            // 
+            rr_writeTest();
         }
 
         if (cmd == "exit") exit(0);

@@ -229,27 +229,10 @@ void rr_display_processes() {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
 
-    if (!rr_g_running_processes.empty()) {
-        std::cout << "CPU Utilization: 100%" << std::endl;
-        std::cout << rr_g_running_processes[10]->id;
-    } else {
+    if (rr_g_running_processes[0] == nullptr) {
         std::cout << "CPU Utilization: 0%" << std::endl;
-    }
-
-
-    std::cout << "Process Queue:\n";
-    for (const auto& p : rr_g_ready_queue) {
-        if (p) {
-            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
-                      << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
-                      << "\tCore: " << p->assigned_core
-                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
-        }
-        if (p->processName == "") {
-            std::cout << "TEST THIS HAS NO NAME" << std::endl;                                           // delete these afterwards
-        } else if (p->processName != "") {
-            std::cout << "ALARM LARLMARLMARLMARLMAMRL THIS HAS A NAME THATS WRONG" << std::endl;
-        }
+    } else {
+        std::cout << "CPU Utilization: 100%" << std::endl;
     }
 
     std::cout << "\nRunning processes:\n";
@@ -271,6 +254,49 @@ void rr_display_processes() {
     }
     std::cout << "-------------------------------------------------------------\n\n";
 }
+
+void rr_write_processes() {
+    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+    std::ofstream outfile("csopesy-log.txt", std::ios::app); // Open in append mode
+    
+    if (!outfile.is_open()) {
+        std::cerr << "Error: Unable to open file " << "csopesy-log.txt" << " for writing." << std::endl;
+        return;
+    }
+
+    outfile << "\n-------------------------------------------------------------\n";
+
+    if (rr_g_running_processes[0] == nullptr) {
+        outfile << "CPU Utilization: 0%" << std::endl;
+    } else {
+        outfile << "CPU Utilization: 100%" << std::endl;
+    }
+
+    outfile << "\nRunning processes:\n";
+    for (const auto& p : rr_g_running_processes) {
+        if (p) {
+            outfile << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                  << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                  << "\tCore: " << p->assigned_core
+                  << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+
+    outfile << "\nFinished processes:\n";
+    for (const auto& p : rr_g_finished_processes) {
+        outfile << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+              << " (" << rr_format_time(p->finish_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+              << "\tFinished"
+              << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+    }
+    outfile << "-------------------------------------------------------------\n\n";
+    
+    outfile.close();
+}
+
+
+
+
 
 void rr_create_process(std::string processName) {
     // Create a new process
