@@ -19,7 +19,6 @@
 // --- Configuration ---
 const int NUM_PROCESSES = 10;
 const int COMMANDS_PER_PROCESS = 105;
-const int TIME_QUANTUM = 3;
 
 // --- Process State ---
 enum class ProcessState {
@@ -183,7 +182,7 @@ void rr_core_worker_func(int core_id) { // executes cmds
             }
 
             std::unique_lock<std::mutex> lock(rr_g_process_mutex);
-            if (my_process->commands_executed_this_quantum >= TIME_QUANTUM && my_process->program_counter < my_process->commands.size()) {
+            if (my_process->commands_executed_this_quantum >= qCycles && my_process->program_counter < my_process->commands.size()) {
                 // Preempt the process and put it back in the ready queue
                 my_process->state = ProcessState::READY;
                 rr_g_ready_queue.push_back(my_process);
