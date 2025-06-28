@@ -2,17 +2,23 @@
 #include <iostream> 
 #include <iomanip> 
 #include <ctime> 
-#include <chrono> 
 #include <Windows.h>
-#include <mutex> 
+#include "process.h"
 
 ProcessScreen::ProcessScreen(const std::string& name) 
-    : name(name), currentLine(0), totalLines(1000), 
-    creationTime(std::chrono::system_clock::now()) {} 
+    : name(name), creationTime(std::chrono::system_clock::now()), linked_pcb(nullptr) {} 
 
-// ProcessScreen::~ProcessScreen() {
-//     stop();
-// } 
+void ProcessScreen::linkPCB(std::shared_ptr<PCB> pcb) {
+    linked_pcb = pcb;
+}
+
+// Formats time for display
+void formatTime(char* buffer, size_t bufferSize, const std::chrono::system_clock::time_point& tp) {
+    auto time = std::chrono::system_clock::to_time_t(tp);
+    std::tm timeinfo = {};
+    localtime_s(&timeinfo, &time);
+    strftime(buffer, bufferSize, "%m/%d/%Y, %I:%M:%S %p", &timeinfo);
+}
 
 void ProcessScreen::display() const {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
@@ -20,67 +26,40 @@ void ProcessScreen::display() const {
     GetConsoleScreenBufferInfo(hConsole, &csbi); 
     int width = csbi.srWindow.Right - csbi.srWindow.Left + 1; 
 
-    // Readable format for time 
-    auto time = std::chrono::system_clock::to_time_t(creationTime); 
-    std::tm timeinfo = {}; 
-    std::tm* tmp = std::localtime(&time); 
-    if (tmp) timeinfo = *tmp;
-    
     char timeBuf[80]; 
-    strftime(timeBuf, sizeof(timeBuf), "%m/%d/%Y, %I:%M:%S %p", &timeinfo); 
+    formatTime(timeBuf, sizeof(timeBuf), creationTime);
 
     // Display screen header 
     std::cout << std::string(width, '=') << "\n"; 
     std::cout << "Process Screen: " << name << "\n"; 
     std::cout << "Created: " << timeBuf << "\n"; 
+    std::cout << "Type 'process-smi' to see details or 'exit' to return to main menu.\n";
     std::cout << std::string(width, '=') << "\n\n";
 
-    // Static progress display
-    std::cout << "Progress: 0/1000 (0%)\n" << std::endl;
+    // Show initial SMI view
+    displaySMI();
 }
 
-// void ProcessScreen::run() {
-//     if (running) return; 
+void ProcessScreen::displaySMI() const {
+    std::lock_guard<std::mutex> lock(displayMutex);
 
-//     running = true; 
-//     progressThread.reset(new std::thread(&ProcessScreen::updateProgress, this));
-// }
+    if (!linked_pcb) {
+        std::cout << "Error: Process data is not available." << std::endl;
+        return;
+    }
 
-// void ProcessScreen::stop() {
-//     if (running) {
-//         running = false; 
+    std::cout << "Process name: " << linked_pcb->processName << std::endl;
+    std::cout << "ID: " << linked_pcb->id << std::endl;
+    std::cout << "Logs:" << std::endl;
 
-//         if (progressThread && progressThread->joinable()) {
-//             progressThread->join();
-//         }
-//      }
-// }
+    for(const auto& log : linked_pcb->logs) {
+        std::cout << log; // The log should already have a newline
+    }
 
-// void ProcessScreen::updateProgress() {
-//     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
-//     CONSOLE_SCREEN_BUFFER_INFO csbi; 
-//     GetConsoleScreenBufferInfo(hConsole, &csbi); 
+    std::cout << "\nCurrent instruction line: " << linked_pcb->program_counter << std::endl;
+    std::cout << "Lines of code: " << linked_pcb->instructions.size() << std::endl;
 
-//     const SHORT progressLine = csbi.srWindow.Bottom - 2; 
-    
-//     while (running) {
-//         // Simulate progress
-//         if (currentLine < totalLines) {
-//             currentLine++; 
-//         } 
-
-//         {
-//             std::lock_guard<std::mutex> lock(displayMutex); 
-//             HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE); 
-//             CONSOLE_SCREEN_BUFFER_INFO csbi; 
-//             GetConsoleScreenBufferInfo(hConsole, &csbi); 
-
-//             COORD pos = {0, 5};
-//             SetConsoleCursorPosition(hConsole, pos);
-
-//             int percentatge = (currentLine*100) / totalLines; 
-//             std::cout << "Progress: " << currentLine << "/" << totalLines << " (" << percentatge << "%)      ";
-//         }
-//         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//     }
-// }
+    if (linked_pcb->state == ProcessState::FINISHED) {
+        std::cout << "\nFinished!" << std::endl;
+    }
+}

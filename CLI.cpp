@@ -1,5 +1,4 @@
-/** 
- * CSOPESY Command Line Interface 
+/** * CSOPESY Command Line Interface 
 */
 #include "ScreenManager.h"
 #include <iostream> 
@@ -11,6 +10,7 @@
 #include <thread>
 #include <sstream>
 #include <ctime>
+#include "process.h"
 
 using namespace std;
 
@@ -83,7 +83,7 @@ void printCentered(const string& text, int width) {
 /**
  * Generates ASCII header with CSOPESY text 
  * @details Uses charPatterns to build letters line-by-line 
- *          Wraps header in asterisk border matching console width 
+ * Wraps header in asterisk border matching console width 
 */
 void printHeader() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
@@ -105,7 +105,7 @@ void printHeader() {
 /**
  * Displays welcome messages with color formatting 
  * @details First line: Light green welcome text 
- *          Second line: Light yellow instructions 
+ * Second line: Light yellow instructions 
 */
 void printWelcome() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
@@ -148,8 +148,8 @@ void initializePositions() {
 /**
  * Clears screen and reinitializes interface 
  * @details 1. Fills console with spaces 
- *          2. Reprints header/welcome messages 
- *          3. Maintains color consistency 
+ * 2. Reprints header/welcome messages 
+ * 3. Maintains color consistency 
 */
 void clearScreen() {
     CONSOLE_SCREEN_BUFFER_INFO csbi; 
@@ -286,7 +286,7 @@ bool readConfig(){
  * @param cmd Input command string 
  * @return Response messages or empty string for clear 
  * @details Valid commands: initialize, screen, scheduler-test, 
- *                          scheduler-stop, report-util, clear, exit
+ * scheduler-stop, report-util, clear, exit
 */
 string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 

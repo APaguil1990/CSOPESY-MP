@@ -12,6 +12,7 @@
 #include <atomic>
 #include <sstream>
 #include <random>
+#include "process.h"
 
 #include "config.h"
 
@@ -20,48 +21,13 @@ const int NUM_PROCESSES = 10;
 const int COMMANDS_PER_PROCESS = 105;
 const int TIME_QUANTUM = 3;
 
-// --- Process State ---
-enum class ProcessState {
-    READY,
-    RUNNING,
-    FINISHED
-};
-
-// --- Process Control Block (PCB) ---
-struct RR_PCB {
-    int id;
-    std::string processName = "";
-    int commands_executed_this_quantum;
-    ProcessState state;
-    std::vector<std::string> commands;
-    size_t program_counter = 0;
-    std::chrono::system_clock::time_point start_time;
-    std::chrono::system_clock::time_point finish_time;
-    int assigned_core = -1;
-    std::vector<std::string> log_file;
-
-    // RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
-    //     std::stringstream ss;
-    //     ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
-    //     log_file.open(ss.str());
-    // }
-
-    // ~RR_PCB() {
-    //     if (log_file.is_open()) {
-    //         log_file.close();
-    //     }
-    // }
-};
-
-
-
 std::random_device rd;  // a seed source for the random number engine
 std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
 // --- Shared Data Structures ---
-std::deque<std::shared_ptr<RR_PCB>> rr_g_ready_queue;
-std::vector<std::shared_ptr<RR_PCB>> rr_g_running_processes(CPU_COUNT, nullptr);
-std::vector<std::shared_ptr<RR_PCB>> rr_g_finished_processes;
+std::deque<std::shared_ptr<PCB>> rr_g_ready_queue;
+std::vector<std::shared_ptr<PCB>> rr_g_running_processes(CPU_COUNT, nullptr);
+std::vector<std::shared_ptr<PCB>> rr_g_finished_processes;
 
 // --- Synchronization Primitives ---
 std::mutex rr_g_process_mutex;
@@ -133,7 +99,7 @@ void rr_scheduler_thread_func() {
 
         for (int i = 0; i < CPU_COUNT; ++i) {
             if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) {
-                std::shared_ptr<RR_PCB> process = rr_g_ready_queue.front();
+                std::shared_ptr<PCB> process = rr_g_ready_queue.front();
                 rr_g_ready_queue.pop_front();
                 process->state = ProcessState::RUNNING;
                 process->assigned_core = i;
@@ -149,7 +115,7 @@ void rr_scheduler_thread_func() {
 // --- CPU Worker Thread Function ---
 void rr_core_worker_func(int core_id) { // executes cmds
     while (rr_g_is_running) {
-        std::shared_ptr<RR_PCB> my_process = nullptr;
+        std::shared_ptr<PCB> my_process = nullptr;
         {
             std::lock_guard<std::mutex> lock(rr_g_process_mutex);
             my_process = rr_g_running_processes[core_id];
@@ -182,7 +148,7 @@ void rr_core_worker_func(int core_id) { // executes cmds
                     std::ostringstream tempString;
                     tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
                                << " \"" << command << "\"" << std::endl;
-                    my_process->log_file.push_back(tempString.str());
+                    my_process->rr_log_file.push_back(tempString.str());
                 }
 
 
@@ -260,11 +226,11 @@ void rr_display_processes() {
 
 void rr_create_process(std::string processName) {
     // Create a new process
-    std::shared_ptr<RR_PCB> pcb;
+    std::shared_ptr<PCB> pcb;
     {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
         
-        pcb = std::make_shared<RR_PCB>(cpuClocks);
+        pcb = std::make_shared<PCB>(cpuClocks);
         pcb->start_time = std::chrono::system_clock::now();
         pcb->processName = processName;
 
@@ -321,11 +287,11 @@ void create_processes() {
     while (rr_g_is_running) {
         if (process_maker_running) {
             // Create a new process
-            std::shared_ptr<RR_PCB> pcb;
+            std::shared_ptr<PCB> pcb;
             {
                 std::lock_guard<std::mutex> lock(rr_g_process_mutex);
                 
-                pcb = std::make_shared<RR_PCB>(cpuClocks);
+                pcb = std::make_shared<PCB>(cpuClocks);
                 pcb->start_time = std::chrono::system_clock::now();
 
                 std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
