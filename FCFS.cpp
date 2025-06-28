@@ -25,7 +25,7 @@ enum class ProcessState {
 };
 
 // --- Process Control Block (PCB) ---
-struct PCB {
+struct FCFS_PCB {
     int id;
     ProcessState state;
     std::vector<std::string> commands;
@@ -35,13 +35,13 @@ struct PCB {
     int assigned_core = -1;
     std::ofstream log_file;
 
-    PCB(int pid) : id(pid), state(ProcessState::READY) {
+    FCFS_PCB(int pid) : id(pid), state(ProcessState::READY) {
         std::stringstream ss;
         ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
         log_file.open(ss.str());
     }
 
-    ~PCB() {
+    ~FCFS_PCB() {
         if (log_file.is_open()) {
             log_file.close();
         }
@@ -49,9 +49,9 @@ struct PCB {
 };
 
 // --- Shared Data Structures ---
-std::deque<std::shared_ptr<PCB>> fcfs_g_ready_queue;
-std::vector<std::shared_ptr<PCB>> fcfs_g_running_processes(NUM_CORES, nullptr);
-std::vector<std::shared_ptr<PCB>> fcfs_g_finished_processes;
+std::deque<std::shared_ptr<FCFS_PCB>> fcfs_g_ready_queue;
+std::vector<std::shared_ptr<FCFS_PCB>> fcfs_g_running_processes(NUM_CORES, nullptr);
+std::vector<std::shared_ptr<FCFS_PCB>> fcfs_g_finished_processes;
 
 // --- Synchronization Primitives ---
 std::mutex fcfs_g_process_mutex;
@@ -87,7 +87,7 @@ void fcfs_scheduler_thread_func() {
 
         for (int i = 0; i < NUM_CORES; ++i) {
             if (fcfs_g_running_processes[i] == nullptr && !fcfs_g_ready_queue.empty()) {
-                std::shared_ptr<PCB> process = fcfs_g_ready_queue.front();
+                std::shared_ptr<FCFS_PCB> process = fcfs_g_ready_queue.front();
                 fcfs_g_ready_queue.pop_front();
                 process->state = ProcessState::RUNNING;
                 process->assigned_core = i;
@@ -100,7 +100,7 @@ void fcfs_scheduler_thread_func() {
 // --- CPU Worker Thread Function ---
 void fcfs_core_worker_func(int core_id) {
     while (fcfs_g_is_running) {
-        std::shared_ptr<PCB> my_process = nullptr;
+        std::shared_ptr<FCFS_PCB> my_process = nullptr;
         {
             std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
             my_process = fcfs_g_running_processes[core_id];
@@ -135,6 +135,17 @@ void fcfs_core_worker_func(int core_id) {
 void fcfs_display_processes() {
     std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
+
+    std::cout << "Process Queue:\n";
+    for (const auto& p : fcfs_g_ready_queue) {
+        if (p) {
+            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                      << " (" << fcfs_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                      << "\tCore: " << p->assigned_core
+                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+
     std::cout << "Running processes:\n";
     for (const auto& p : fcfs_g_running_processes) {
         if (p) {
@@ -164,7 +175,7 @@ int FCFS() {
     {
         std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
         for (int i = 1; i <= NUM_PROCESSES; ++i) {
-            auto pcb = std::make_shared<PCB>(i);
+            auto pcb = std::make_shared<FCFS_PCB>(i);
             pcb->start_time = std::chrono::system_clock::now();
             for (int j = 0; j < COMMANDS_PER_PROCESS; ++j) {
                 std::stringstream command_stream;
@@ -186,6 +197,7 @@ int FCFS() {
     // --- Main UI Loop  ---
     std::string command;
     while (fcfs_g_is_running) {
+        fcfs_display_processes();
         if (command == "exit") {
             fcfs_g_is_running = false;
             fcfs_g_scheduler_cv.notify_all(); // Wake up all waiting threads

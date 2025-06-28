@@ -341,7 +341,7 @@ string processCommand(const string& cmd) {
                schedulerFCFS.detach();
                return "running FCFS scheduler";
             }else if (scheduler == "rr"){
-               thread schedulerRR(runFCFS);
+               thread schedulerRR(runRR);
                schedulerRR.detach();
                return "running RR scheduler";
             }
