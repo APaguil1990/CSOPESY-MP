@@ -54,6 +54,8 @@ struct RR_PCB {
     // }
 };
 
+
+
 std::random_device rd;  // a seed source for the random number engine
 std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
@@ -320,8 +322,12 @@ int RR() {
     }
     rr_g_scheduler_cv.notify_all();
 
+    process_maker_running = true;
+
     // --- Process Generation and Execution Loop ---
     while (rr_g_is_running) {
+        if (process_maker_running) {
+
         // Create a new process
         std::shared_ptr<RR_PCB> pcb;
         {
@@ -370,7 +376,7 @@ int RR() {
             
             rr_g_ready_queue.push_back(pcb);
         }
-        
+        }
         // Notify scheduler that a new process is available
         rr_g_scheduler_cv.notify_one();
 
@@ -378,26 +384,21 @@ int RR() {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         // Check for user input
-        std::string command;
 
-        if (command == "screen -ls") {
-            rr_display_processes();
-        } else if (command == "exit") {
+        if (rr_g_ready_queue.empty() && rr_g_running_processes.empty()) {
             rr_g_is_running = false;
-            rr_g_scheduler_cv.notify_all(); // Wake up all waiting threads
-        } else if (!command.empty()) {
-            std::cout << "Unknown command: '" << command << "'" << std::endl;
+            rr_g_scheduler_cv.notify_all();
         }
         
     }
 
     // --- Shutdown ---
-    std::cout << "Shutting down. Waiting for threads to complete..." << std::endl;
+    // std::cout << "Shutting down. Waiting for threads to complete..." << std::endl;
     scheduler.join();
     for (auto& worker : core_workers) {
         worker.join();
     }
-    std::cout << "Emulator terminated." << std::endl;
+    // std::cout << "Emulator terminated." << std::endl;
 
     return 0;
 }

@@ -16,6 +16,8 @@ using namespace std;
 
 bool initFlag = false;
 
+bool process_maker_running = false;
+
 //config parameters
 int CPU  = 4; // cpus available [1, 128]
 string scheduler = ""; // fcfs or rr
@@ -313,21 +315,26 @@ string processCommand(const string& cmd) {
 
     // Handle screen commands 
     if (tokens[0] == "screen" && initFlag == true) {
-        if (tokens[1] == "-s") {
-            manager->createScreen(tokens[2]); 
-            nameProcess(tokens[2]);
-            return "Created screen: " + tokens[2]; 
+        if (tokens[1] == "-s" ) {
+            if (process_maker_running) {
+                manager->createScreen(tokens[2]); 
+                nameProcess(tokens[2]);
+                return "Created screen: " + tokens[2];
+            } else {
+                return "scheduler has not been started yet!";
+            }
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
                 manager->attachScreen(tokens[2]); 
                 return "";
+            } else {
+                return "Screen not found: " + tokens[2]; 
             }
-            return "Screen not found: " + tokens[2]; 
         } else if (tokens[1] == "-ls") {
             displayTest();
             return "";
         }
-    }else if (tokens.size() >=3 && tokens[0] == "screen" && initFlag == false){
+    }else if (tokens[0] == "screen" && initFlag == false){
         return "use the 'initialize' command before using other commands";
     }
 

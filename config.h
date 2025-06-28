@@ -17,6 +17,8 @@ extern unsigned short variable_c;
 
 extern int cpuClocks;
 
+extern bool process_maker_running;
+
 #endif
 
 // TODO: dont forget to include this where the vars are needed
