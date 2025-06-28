@@ -400,6 +400,10 @@ string processCommand(const string& cmd) {
             return "initialize has already been used";
         }
 
+        if (cmd == "report-util"){
+            // 
+        }
+
         if (cmd == "exit") exit(0);
     }
     //If command was not recognized

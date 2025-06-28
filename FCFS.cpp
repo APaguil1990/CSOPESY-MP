@@ -192,6 +192,13 @@ void fcfs_display_processes() {
     std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
 
+    if (!fcfs_g_running_processes.empty()) {
+        std::cout << "CPU Utilization: 100%" << std::endl;
+    } else {
+        std::cout << "CPU Utilization: 0%" << std::endl;
+    }
+    
+
     std::cout << "Process Queue:\n";
     for (const auto& p : fcfs_g_ready_queue) {
         if (p) {

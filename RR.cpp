@@ -229,6 +229,13 @@ void rr_display_processes() {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
 
+    if (!rr_g_running_processes.empty()) {
+        std::cout << "CPU Utilization: 100%" << std::endl;
+        std::cout << rr_g_running_processes[10]->id;
+    } else {
+        std::cout << "CPU Utilization: 0%" << std::endl;
+    }
+
 
     std::cout << "Process Queue:\n";
     for (const auto& p : rr_g_ready_queue) {
