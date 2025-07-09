@@ -225,8 +225,8 @@ void runRR(){
 }
 
 void rr_searchTest(std::string processName) {
-    void rr_search_process(std::string processName);
-    rr_search_process(processName);
+    // void rr_search_process(std::string processName);
+    // rr_search_process(processName);
 }
 
 void rr_displayTest(){

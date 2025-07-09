@@ -38,7 +38,21 @@ struct RR_PCB {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point finish_time;
     int assigned_core = -1;
-    std::vector<std::string> log_file;
+    // std::vector<std::string> log_file;
+
+    std::ofstream log_file;
+
+    RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
+        std::stringstream ss;
+        ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
+        log_file.open(ss.str());
+    }
+
+    ~RR_PCB() {
+        if (log_file.is_open()) {
+            log_file.close();
+        }
+    }
 };
 
 
@@ -167,10 +181,17 @@ void rr_core_worker_func(int core_id) { // executes cmds
 
 
                 } else {
-                    std::ostringstream tempString;
-                    tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                               << " \"" << command << "\"" << std::endl;
-                    my_process->log_file.push_back(tempString.str());
+                    // log file in memory
+                    // std::ostringstream tempString;
+                    // tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //            << " \"" << command << "\"" << std::endl;
+                    // my_process->log_file.push_back(tempString.str());
+
+                    // log file in file
+                    const std::string& command = my_process->commands[my_process->program_counter];
+                    my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                                     << " \"" << command << "\"" << std::endl;
+                    my_process->program_counter++;
                 }
 
 
@@ -205,23 +226,24 @@ void rr_core_worker_func(int core_id) { // executes cmds
     }
 }
 
-void rr_search_process(std::string process_search) {
-    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-    std::cout << "\n-------------------------------------------------------------\n";
+// find process for screen -r (log file in memory)
+// void rr_search_process(std::string process_search) {
+//     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+//     std::cout << "\n-------------------------------------------------------------\n";
 
-    for (const auto& p : rr_g_ready_queue) {
-        std::stringstream tempString;
-        tempString << "process" << p->id;
+//     for (const auto& p : rr_g_ready_queue) {
+//         std::stringstream tempString;
+//         tempString << "process" << p->id;
 
-        if (process_search.compare(p->processName) == 0 || process_search.compare(tempString.str()) == 0) {
-            for(const std::string& line : p->log_file) {
-                std::cout << line << std::endl;
-            }
-        }
-    }
-    std::cout << "-------------------------------------------------------------\n\n";
-    std::cout << process_search;
-}
+//         if (process_search.compare(p->processName) == 0 || process_search.compare(tempString.str()) == 0) {
+//             for(const std::string& line : p->log_file) {
+//                 std::cout << line << std::endl;
+//             }
+//         }
+//     }
+//     std::cout << "-------------------------------------------------------------\n\n";
+//     std::cout << process_search;
+// }
 
 // --- UI Function to Display Process Lists ---
 void rr_display_processes() {
