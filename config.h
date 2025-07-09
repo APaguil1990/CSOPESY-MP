@@ -11,6 +11,10 @@ extern int MIN_INS;
 extern int MAX_INS;
 extern int delayPerExec;
 
+extern int MAX_OVERALL_MEM;
+extern int MEM_PER_FRAME;
+extern int MEM_PER_PROC;
+
 extern unsigned short variable_a;
 extern unsigned short variable_b;
 extern unsigned short variable_c;

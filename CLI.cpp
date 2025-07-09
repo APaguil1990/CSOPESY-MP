@@ -27,6 +27,10 @@ int MIN_INS = 1; // min instructions per process [1, 2^32]
 int MAX_INS = 100; // max instructions per process [1, 2^32]
 int delayPerExec = 0; // delay between executing next instruction [0, 2^32]
 
+int MAX_OVERALL_MEM = 0;
+int MEM_PER_FRAME = 0;
+int MEM_PER_PROC = 0;
+
 unsigned short variable_a = 0;
 unsigned short variable_b = 0;
 unsigned short variable_c = 0;
@@ -291,6 +295,12 @@ bool readConfig(){
                 MAX_INS = std::stoi(value);
             } else if (key == "delay-per-exec") {
                 delayPerExec = std::stoi(value);
+            } else if (key == "max-overall-mem") {
+                MAX_OVERALL_MEM = std::stoi(value);
+            } else if (key == "mem-per-frame") {
+                MEM_PER_FRAME = std::stoi(value);
+            } else if (key == "mem-per-proc") {
+                MEM_PER_PROC = std::stoi(value);
             }
         }
     }
