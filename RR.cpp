@@ -27,6 +27,12 @@ enum class ProcessState {
     FINISHED
 };
 
+struct frame {
+    int max_memory = MEM_PER_FRAME; // cant get declared properly here because of how the initialize commands work, needs a check
+    std::vector<int> current_memory; // this should be a vector with another one for wat process is in here
+    std::vector<int> current_occupied;
+};
+
 // --- Process Control Block (PCB) ---
 struct RR_PCB {
     int id;
@@ -55,14 +61,14 @@ struct RR_PCB {
     }
 };
 
-
+std::vector<std::shared_ptr<frame>> rr_memory_block(2048, nullptr); // unknown max possible frames? maybe a different data struct can handle this better
 
 std::random_device rr_rd;  // a seed source for the random number engine
 std::mt19937 rr_gen(rr_rd()); // mersenne_twister_engine seeded with rd()
 
 // --- Shared Data Structures ---
 std::deque<std::shared_ptr<RR_PCB>> rr_g_ready_queue;
-std::vector<std::shared_ptr<RR_PCB>> rr_g_running_processes(CPU_COUNT, nullptr);
+std::vector<std::shared_ptr<RR_PCB>> rr_g_running_processes(128, nullptr); // 128 is max cpu count
 std::vector<std::shared_ptr<RR_PCB>> rr_g_finished_processes;
 
 // --- Synchronization Primitives ---
@@ -133,8 +139,8 @@ void rr_scheduler_thread_func() {
 
         if (!rr_g_is_running) break;
 
-        for (int i = 0; i < CPU_COUNT; ++i) {
-            if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) {
+        for (int i = 0; i < CPU_COUNT; ++i) { // check if empty slot available and ready queue available
+            if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) { // edits here for memory allocator     and memory isnt full
                 std::shared_ptr<RR_PCB> process = rr_g_ready_queue.front();
                 rr_g_ready_queue.pop_front();
                 process->state = ProcessState::RUNNING;
@@ -210,7 +216,7 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 rr_g_running_processes[core_id] = nullptr;
                 rr_g_scheduler_cv.notify_one();
             } 
-            else if (my_process->program_counter >= my_process->commands.size()) {
+            else if (my_process->program_counter >= my_process->commands.size()) { // edit here for memory allocator
                 // Process has completed all commands
                 my_process->state = ProcessState::FINISHED;
                 my_process->finish_time = std::chrono::system_clock::now();

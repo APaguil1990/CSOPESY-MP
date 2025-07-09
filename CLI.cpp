@@ -21,15 +21,17 @@ bool process_maker_running = false;
 //config parameters
 int CPU_COUNT = 128; // cpus available [1, 128]
 string scheduler = ""; // fcfs or rr
-int qCycles = 1; // quantum [1, 2^32]
-int processFrequency = 1; // every x cycles, generate a new process for scheduler-start [1, 2^32]
+int qCycles = 100000; // quantum [1, 2^32]
+int processFrequency = 100000; // every x cycles, generate a new process for scheduler-start [1, 2^32]
 int MIN_INS = 1; // min instructions per process [1, 2^32]
-int MAX_INS = 100; // max instructions per process [1, 2^32]
-int delayPerExec = 0; // delay between executing next instruction [0, 2^32]
+int MAX_INS = 1; // max instructions per process [1, 2^32]
+int delayPerExec = 100000; // delay between executing next instruction [0, 2^32]
 
 int MAX_OVERALL_MEM = 0;
 int MEM_PER_FRAME = 0;
 int MEM_PER_PROC = 0;
+
+int FRAME_COUNT = 0;
 
 unsigned short variable_a = 0;
 unsigned short variable_b = 0;
@@ -305,6 +307,9 @@ bool readConfig(){
         }
     }
     configFile.close();
+
+    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_FRAME;
+
     initFlag = true;
     return true;
 }
