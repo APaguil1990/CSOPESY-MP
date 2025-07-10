@@ -12,13 +12,14 @@
 #include <atomic>
 #include <sstream>
 #include <random>
+#include <unordered_set>
 
 #include "ScreenManager.h"
 #include "config.h"
 
 // --- Configuration ---
-const int NUM_PROCESSES = 10;
-const int COMMANDS_PER_PROCESS = 105;
+// const int NUM_PROCESSES = 10;
+// const int COMMANDS_PER_PROCESS = 105;
 
 // --- Process State ---
 enum class ProcessState {
@@ -27,11 +28,11 @@ enum class ProcessState {
     FINISHED
 };
 
-struct frame {
-    int max_memory = MEM_PER_FRAME; // cant get declared properly here because of how the initialize commands work, needs a check
-    std::vector<int> current_memory; // this should be a vector with another one for wat process is in here
-    std::vector<int> current_occupied;
-};
+// struct frame {
+//     int max_memory = MEM_PER_FRAME; // cant get declared properly here because of how the initialize commands work, needs a check
+//     std::vector<int> current_memory; // this should be a vector with another one for wat process is in here
+//     std::vector<int> current_occupied;
+// };
 
 // --- Process Control Block (PCB) ---
 struct RR_PCB {
@@ -61,7 +62,9 @@ struct RR_PCB {
     }
 };
 
-std::vector<std::shared_ptr<frame>> rr_memory_block(2048, nullptr); // unknown max possible frames? maybe a different data struct can handle this better
+// std::vector<std::shared_ptr<frame>> rr_memory_block(2048, nullptr); // unknown max possible frames? maybe a different data struct can handle this better
+
+std::unordered_set<std::shared_ptr<RR_PCB>> rr_g_memory_processes;
 
 std::random_device rr_rd;  // a seed source for the random number engine
 std::mt19937 rr_gen(rr_rd()); // mersenne_twister_engine seeded with rd()
@@ -140,13 +143,28 @@ void rr_scheduler_thread_func() {
         if (!rr_g_is_running) break;
 
         for (int i = 0; i < CPU_COUNT; ++i) { // check if empty slot available and ready queue available
-            if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) { // edits here for memory allocator     and memory isnt full
+            if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) {
                 std::shared_ptr<RR_PCB> process = rr_g_ready_queue.front();
-                rr_g_ready_queue.pop_front();
-                process->state = ProcessState::RUNNING;
-                process->assigned_core = i;
-                process->commands_executed_this_quantum = 0;
-                rr_g_running_processes[i] = process;
+                
+                // Check if memory has space or if the process is already in memory
+                if (rr_g_memory_processes.size() < FRAME_COUNT || rr_g_memory_processes.find(process) != rr_g_memory_processes.end()) {
+                    
+                    // Add to memory if not already present
+                    if (rr_g_memory_processes.find(process) == rr_g_memory_processes.end()) {
+                        rr_g_memory_processes.insert(process);
+                    }
+                    
+                    // Schedule the process
+                    rr_g_ready_queue.pop_front();
+                    process->state = ProcessState::RUNNING;
+                    process->assigned_core = i;
+                    process->commands_executed_this_quantum = 0;
+                    rr_g_running_processes[i] = process;
+                } else {
+                    rr_g_ready_queue.pop_front();
+                    rr_g_ready_queue.emplace_back(process);
+                }
+                // If memory is full and process isn't in memory, leave it in the queue
             }
         }
     }
@@ -222,6 +240,9 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 my_process->finish_time = std::chrono::system_clock::now();
                 rr_g_finished_processes.push_back(my_process);
                 rr_g_running_processes[core_id] = nullptr;
+
+                rr_g_memory_processes.erase(my_process);
+
                 rr_g_scheduler_cv.notify_one();
             }
             lock.unlock();
@@ -260,6 +281,26 @@ void rr_display_processes() {
         std::cout << "CPU Utilization: 0%" << std::endl;
     } else {
         std::cout << "CPU Utilization: 100%" << std::endl;
+    }
+
+    std::cout << "\nMemory processes:\n";
+    for (const auto& p : rr_g_memory_processes) {
+        if (p) {
+            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                      << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                      << "\tCore: " << p->assigned_core
+                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+    
+    std::cout << "\nReady processes:\n";
+    for (const auto& p : rr_g_ready_queue) {
+        if (p) {
+            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                      << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                      << "\tCore: " << p->assigned_core
+                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
     }
 
     std::cout << "\nRunning processes:\n";
@@ -343,6 +384,7 @@ void rr_create_process(std::string processName) {
         for (int j = 0; j < instructionCount; ++j) {
             std::stringstream rr_command_stream;
             int instruction = instruction_rand(rr_gen);
+            // int instruction = 0;
 
             switch (instruction) {
                 case 0: // print

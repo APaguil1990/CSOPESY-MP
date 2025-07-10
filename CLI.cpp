@@ -308,7 +308,7 @@ bool readConfig(){
     }
     configFile.close();
 
-    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_FRAME;
+    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_PROC;
 
     initFlag = true;
     return true;
