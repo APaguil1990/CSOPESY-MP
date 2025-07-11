@@ -117,7 +117,7 @@ void display_memory() {
 
     memory_file << "Timestamp: (" << rr_format_time(std::chrono::system_clock::now(), "%m/%d/%Y %I:%M:%S%p") << ")" << std::endl;
     memory_file << "Number of processes in memory: " << rr_g_memory_processes.size() << std::endl;
-    memory_file << "Total external fragmentation in KB: " << (i-rr_g_memory_processes.size())*4096 << std::endl << std::endl;
+    memory_file << "Total external fragmentation in KB: " << (i-rr_g_memory_processes.size())*MEM_PER_PROC << std::endl << std::endl;
 
     memory_file << "----end---- = " << MAX_OVERALL_MEM << std::endl << std::endl;
 
