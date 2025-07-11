@@ -1,4 +1,5 @@
 #include <iostream>
+#include <ostream>
 #include <vector>
 #include <string>
 #include <thread>
@@ -45,24 +46,24 @@ struct RR_PCB {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point finish_time;
     int assigned_core = -1;
-    // std::vector<std::string> log_file;
+    std::vector<std::string> log_file;
 
-    std::ofstream log_file;
+    // std::ofstream log_file;
+    // RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
+    //     std::stringstream ss;
+    //     ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
+    //     log_file.open(ss.str());
+    // }
 
-    RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
-        std::stringstream ss;
-        ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
-        log_file.open(ss.str());
-    }
-
-    ~RR_PCB() {
-        if (log_file.is_open()) {
-            log_file.close();
-        }
-    }
+    // ~RR_PCB() {
+    //     if (log_file.is_open()) {
+    //         log_file.close();
+    //     }
+    // }
 };
 
 // std::vector<std::shared_ptr<frame>> rr_memory_block(2048, nullptr); // unknown max possible frames? maybe a different data struct can handle this better
+int memoryCycle = 0;
 
 std::unordered_set<std::shared_ptr<RR_PCB>> rr_g_memory_processes;
 
@@ -104,6 +105,34 @@ void rr_declareCommand() {
             variable_c = 1;
             break;
     }
+}
+
+void display_memory() {
+    int i = 4;
+
+    std::ostringstream filename;
+    filename << "memory_stamp_" << memoryCycle << ".txt";
+
+    std::ofstream memory_file (filename.str());
+
+    memory_file << "Timestamp: (" << rr_format_time(std::chrono::system_clock::now(), "%m/%d/%Y %I:%M:%S%p") << ")" << std::endl;
+    memory_file << "Number of processes in memory: " << rr_g_memory_processes.size() << std::endl;
+    memory_file << "Total external fragmentation in KB: " << (i-rr_g_memory_processes.size())*4096 << std::endl << std::endl;
+
+    memory_file << "----end---- = " << MAX_OVERALL_MEM << std::endl << std::endl;
+
+    for (const auto& p : rr_g_memory_processes) {
+        if (p) {
+            memory_file << MEM_PER_PROC*i << std::endl;
+            memory_file << p->processName << std::endl;
+            i--;
+            memory_file << MEM_PER_PROC*i << std::endl << std::endl;
+        }
+    }
+
+    memory_file << "----start---- = 0" << std::endl;
+
+    memory_file.close();
 }
 
 void rr_addCommand() {
@@ -206,16 +235,15 @@ void rr_core_worker_func(int core_id) { // executes cmds
 
                 } else {
                     // log file in memory
-                    // std::ostringstream tempString;
-                    // tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                    //            << " \"" << command << "\"" << std::endl;
-                    // my_process->log_file.push_back(tempString.str());
+                    std::ostringstream tempString;
+                    tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                               << " \"" << command << "\"" << std::endl;
+                    my_process->log_file.push_back(tempString.str());
 
                     // log file in file
-                    const std::string& command = my_process->commands[my_process->program_counter];
-                    my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                                     << " \"" << command << "\"" << std::endl;
-                    my_process->program_counter++;
+                    // const std::string& command = my_process->commands[my_process->program_counter];
+                    // my_process->log_file << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //                  << " \"" << command << "\"" << std::endl;
                 }
 
 
@@ -233,6 +261,10 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 rr_g_ready_queue.push_back(my_process);
                 rr_g_running_processes[core_id] = nullptr;
                 rr_g_scheduler_cv.notify_one();
+
+                // printing goes here
+                display_memory();
+                memoryCycle++;
             } 
             else if (my_process->program_counter >= my_process->commands.size()) { // edit here for memory allocator
                 // Process has completed all commands
