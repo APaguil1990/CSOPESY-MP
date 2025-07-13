@@ -10,7 +10,6 @@
 #include <algorithm> 
 #include <thread>
 #include <sstream>
-#include <ctime>
 
 using namespace std;
 
@@ -19,13 +18,19 @@ bool initFlag = false;
 bool process_maker_running = false;
 
 //config parameters
-int CPU_COUNT  = 1; // cpus available [1, 128]
+int CPU_COUNT = 128; // cpus available [1, 128]
 string scheduler = ""; // fcfs or rr
-int qCycles = 1; // quantum [1, 2^32]
-int processFrequency = 1; // every x cycles, generate a new process for scheduler-start [1, 2^32]
+int qCycles = 100000; // quantum [1, 2^32]
+int processFrequency = 100000; // every x cycles, generate a new process for scheduler-start [1, 2^32]
 int MIN_INS = 1; // min instructions per process [1, 2^32]
-int MAX_INS = 100; // max instructions per process [1, 2^32]
-int delayPerExec = 0; // delay between executing next instruction [0, 2^32]
+int MAX_INS = 1; // max instructions per process [1, 2^32]
+int delayPerExec = 100000; // delay between executing next instruction [0, 2^32]
+
+int MAX_OVERALL_MEM = 0;
+int MEM_PER_FRAME = 0;
+int MEM_PER_PROC = 0;
+
+int FRAME_COUNT = 0;
 
 unsigned short variable_a = 0;
 unsigned short variable_b = 0;
@@ -224,13 +229,33 @@ void runRR(){
     RR();
 }
 
-void displayTest(){
+void rr_searchTest(std::string processName) {
+    // void rr_search_process(std::string processName);
+    // rr_search_process(processName);
+}
+
+void rr_displayTest(){
     void rr_display_processes();
     rr_display_processes();
 }
 
-void nameProcess(std::string processName) {
-    void rr_create_process(std::string procesName);
+void rr_writeTest(){
+    void rr_write_processes();
+    rr_write_processes();
+}
+
+void fcfs_displayTest(){
+    void fcfs_display_processes();
+    fcfs_display_processes();
+}
+
+void fcfs_writeTest(){
+    void fcfs_write_processes();
+    fcfs_write_processes();
+}
+
+void rr_nameProcess(std::string processName) {
+    void rr_create_process(std::string processName);
     rr_create_process(processName);
 }
 
@@ -271,10 +296,19 @@ bool readConfig(){
                 MAX_INS = std::stoi(value);
             } else if (key == "delay-per-exec") {
                 delayPerExec = std::stoi(value);
+            } else if (key == "max-overall-mem") {
+                MAX_OVERALL_MEM = std::stoi(value);
+            } else if (key == "mem-per-frame") {
+                MEM_PER_FRAME = std::stoi(value);
+            } else if (key == "mem-per-proc") {
+                MEM_PER_PROC = std::stoi(value);
             }
         }
     }
     configFile.close();
+
+    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_PROC;
+
     initFlag = true;
     return true;
 }
@@ -318,7 +352,7 @@ string processCommand(const string& cmd) {
         if (tokens[1] == "-s" ) {
             if (process_maker_running) {
                 manager->createScreen(tokens[2]); 
-                nameProcess(tokens[2]);
+                rr_nameProcess(tokens[2]);
                 return "Created screen: " + tokens[2];
             } else {
                 return "scheduler has not been started yet!";
@@ -326,12 +360,17 @@ string processCommand(const string& cmd) {
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
                 manager->attachScreen(tokens[2]); 
+                rr_searchTest(tokens[2]);
                 return "";
             } else {
                 return "Screen not found: " + tokens[2]; 
             }
         } else if (tokens[1] == "-ls") {
-            displayTest();
+            if (scheduler == "fcfs") {
+                fcfs_displayTest();
+            } else if (scheduler == "rr") {
+                rr_displayTest();
+            }
             return "";
         }
     }else if (tokens[0] == "screen" && initFlag == false){
@@ -383,6 +422,15 @@ string processCommand(const string& cmd) {
 
         if (cmd == "initialize"){
             return "initialize has already been used";
+        }
+
+        if (cmd == "report-util"){
+            if (scheduler == "rr") {
+                rr_writeTest();
+            } else if (scheduler == "fcfs") {
+                fcfs_writeTest();
+            }
+            
         }
 
         if (cmd == "exit") exit(0);
