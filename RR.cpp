@@ -144,7 +144,7 @@ void rr_subtractCommand() {
 }
 
 void rr_sleepCommand() {
-    cpuClocks += 10;
+    // cpuClocks += 10;
 }
 
 void rr_forCommand() {
@@ -444,8 +444,8 @@ void rr_create_process(std::string processName) {
                     pcb->commands.push_back(rr_command_stream.str());
                     break;
             }
-            cpuClocks++;
         }
+        cpuClocks++;
         
         rr_g_ready_queue.push_back(pcb);
     }
@@ -510,9 +510,9 @@ void rr_create_processes() {
                             pcb->commands.push_back(rr_command_stream.str());
                             break;
                     }
-                    cpuClocks++;
                 }
                 
+                cpuClocks++;
                 rr_g_ready_queue.push_back(pcb);
             }
             
