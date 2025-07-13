@@ -315,25 +315,25 @@ void rr_display_processes() {
         std::cout << "CPU Utilization: 100%" << std::endl;
     }
 
-    std::cout << "\nMemory processes:\n";
-    for (const auto& p : rr_g_memory_processes) {
-        if (p) {
-            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
-                      << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
-                      << "\tCore: " << p->assigned_core
-                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
-        }
-    }
+    // std::cout << "\nMemory processes:\n";
+    // for (const auto& p : rr_g_memory_processes) {
+    //     if (p) {
+    //         std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+    //                   << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+    //                   << "\tCore: " << p->assigned_core
+    //                   << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+    //     }
+    // }
     
-    std::cout << "\nReady processes:\n";
-    for (const auto& p : rr_g_ready_queue) {
-        if (p) {
-            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
-                      << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
-                      << "\tCore: " << p->assigned_core
-                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
-        }
-    }
+    // std::cout << "\nReady processes:\n";
+    // for (const auto& p : rr_g_ready_queue) {
+    //     if (p) {
+    //         std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+    //                   << " (" << rr_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+    //                   << "\tCore: " << p->assigned_core
+    //                   << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+    //     }
+    // }
 
     std::cout << "\nRunning processes:\n";
     for (const auto& p : rr_g_running_processes) {
