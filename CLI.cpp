@@ -328,8 +328,13 @@ string processCommand(const string& cmd) {
     
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-start", "marquee",
-        "scheduler-stop", "report-util", "clear", "exit"
+        "scheduler-stop", "report-util", "vmstat", "process-smi", "clear", "exit"
     };
+
+    //handles empty inputs
+    if (cmd.empty()){
+        return "no input provided";
+    }
 
     //handle initialization before other commands
     if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == false){
@@ -436,6 +441,7 @@ string processCommand(const string& cmd) {
         if (cmd == "exit") exit(0);
     }
     //If command was not recognized
+
     return "Unknown command: " + cmd;
 }
 
