@@ -333,7 +333,7 @@ string processCommand(const string& cmd) {
 
     //handles empty inputs
     if (cmd.empty()){
-        return "no input provided";
+        return "No input provided";
     }
 
     //handle initialization before other commands
@@ -376,6 +376,13 @@ string processCommand(const string& cmd) {
             } else if (scheduler == "rr") {
                 rr_displayTest();
             }
+            return "";
+        }else if (tokens[1] == "-c") {
+            //TODO: Ability to add a set of user-defined instructions when creating a process.
+            // Look for process
+
+            // Add instructions to process to be executed
+            
             return "";
         }
     }else if (tokens[0] == "screen" && initFlag == false){
@@ -427,6 +434,16 @@ string processCommand(const string& cmd) {
 
         if (cmd == "initialize"){
             return "initialize has already been used";
+        }
+
+        if (cmd == "vmstat"){
+            //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
+            
+        }
+
+        if (cmd == "process-smi"){
+            //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
+
         }
 
         if (cmd == "report-util"){
