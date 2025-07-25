@@ -229,6 +229,11 @@ void runRR(){
     RR();
 }
 
+void rr_generate_processes() {
+    void rr_create_processes();
+    rr_create_processes();
+}
+
 void rr_searchTest(std::string processName) {
     // void rr_search_process(std::string processName);
     // rr_search_process(processName);
@@ -344,6 +349,16 @@ string processCommand(const string& cmd) {
                 return "initialization failed, please try again";
             };
 
+            if (scheduler == "fcfs"){
+               thread schedulerFCFS(runFCFS);
+               schedulerFCFS.detach();
+               return "running FCFS scheduler";
+            }else if (scheduler == "rr"){
+               thread schedulerRR(runRR);
+               schedulerRR.detach();
+               return "running RR scheduler";
+            }
+
             return "initialization finished";
         }
 
@@ -417,8 +432,8 @@ string processCommand(const string& cmd) {
                schedulerFCFS.detach();
                return "running FCFS scheduler";
             }else if (scheduler == "rr"){
-               thread schedulerRR(runRR);
-               schedulerRR.detach();
+               thread process_generator_rr(rr_generate_processes);
+               process_generator_rr.detach();
                return "running RR scheduler";
             }
             //if scheduler does not work
