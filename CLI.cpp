@@ -229,6 +229,11 @@ void runRR(){
     RR();
 }
 
+void rr_generate_processes() {
+    void rr_create_processes();
+    rr_create_processes();
+}
+
 void rr_searchTest(std::string processName) {
     // void rr_search_process(std::string processName);
     // rr_search_process(processName);
@@ -328,8 +333,13 @@ string processCommand(const string& cmd) {
     
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-start", "marquee",
-        "scheduler-stop", "report-util", "clear", "exit"
+        "scheduler-stop", "report-util", "vmstat", "process-smi", "clear", "exit"
     };
+
+    //handles empty inputs
+    if (cmd.empty()){
+        return "No input provided";
+    }
 
     //handle initialization before other commands
     if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == false){
@@ -338,6 +348,16 @@ string processCommand(const string& cmd) {
             if (readConfig() == false){
                 return "initialization failed, please try again";
             };
+
+            if (scheduler == "fcfs"){
+               thread schedulerFCFS(runFCFS);
+               schedulerFCFS.detach();
+               return "running FCFS scheduler";
+            }else if (scheduler == "rr"){
+               thread schedulerRR(runRR);
+               schedulerRR.detach();
+               return "running RR scheduler";
+            }
 
             return "initialization finished";
         }
@@ -372,6 +392,13 @@ string processCommand(const string& cmd) {
                 rr_displayTest();
             }
             return "";
+        }else if (tokens[1] == "-c") {
+            //TODO: Ability to add a set of user-defined instructions when creating a process.
+            // Look for process
+
+            // Add instructions to process to be executed
+            
+            return "";
         }
     }else if (tokens[0] == "screen" && initFlag == false){
         return "use the 'initialize' command before using other commands";
@@ -405,8 +432,8 @@ string processCommand(const string& cmd) {
                schedulerFCFS.detach();
                return "running FCFS scheduler";
             }else if (scheduler == "rr"){
-               thread schedulerRR(runRR);
-               schedulerRR.detach();
+               thread process_generator_rr(rr_generate_processes);
+               process_generator_rr.detach();
                return "running RR scheduler";
             }
             //if scheduler does not work
@@ -424,6 +451,16 @@ string processCommand(const string& cmd) {
             return "initialize has already been used";
         }
 
+        if (cmd == "vmstat"){
+            //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
+            
+        }
+
+        if (cmd == "process-smi"){
+            //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
+
+        }
+
         if (cmd == "report-util"){
             if (scheduler == "rr") {
                 rr_writeTest();
@@ -436,6 +473,7 @@ string processCommand(const string& cmd) {
         if (cmd == "exit") exit(0);
     }
     //If command was not recognized
+
     return "Unknown command: " + cmd;
 }
 

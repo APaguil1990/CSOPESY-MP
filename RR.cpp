@@ -542,7 +542,7 @@ int RR() {
     rr_g_scheduler_cv.notify_all();
 
     // Start process creation
-    rr_create_processes();
+    // rr_create_processes();
 
     // Shutdown
     scheduler.join();
