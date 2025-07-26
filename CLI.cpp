@@ -313,7 +313,25 @@ bool readConfig(){
     return true;
 }
 
+bool vmstat(){
+    //prototype
+    // usedMem = rr_g_memory_processes.size()(will get this) * MEM_PER_PROC
 
+    cout << "Total memory     : " << MAX_OVERALL_MEM << " bytes\n";
+    // cout << "Used memory      : " << c << " bytes\n";
+    // cout << "Free memory      : " << usedMem - MAX_OVERALL_MEM << " bytes\n";
+    // cout << "Idle CPU ticks   : " << idleTicks << "\n";
+    // cout << "Active CPU ticks : " << activeTicks << "\n";
+    // cout << "Total CPU ticks  : " << totalTicks << "\n";
+    // cout << "Num paged in     : " << pagedIn << "\n";
+    // cout << "Num paged out    : " << pagedOut << "\n";
+    return true;
+}
+
+bool processsmi(){
+    
+    return true;
+}
 
 /**
  * Processes user commands and return response 
@@ -438,12 +456,18 @@ string processCommand(const string& cmd) {
 
         if (cmd == "vmstat"){
             //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
-            
+            if(vmstat() == false){
+                return "error: cannot retrieve information for vmstat"; 
+            }
+            return "";
         }
 
         if (cmd == "process-smi"){
             //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
-
+             if(processsmi() == false){
+                return "error: cannot retrieve information for process-smi"; 
+            }
+            return "used process-smi";
         }
 
         if (cmd == "report-util"){
@@ -452,7 +476,7 @@ string processCommand(const string& cmd) {
             } else if (scheduler == "fcfs") {
                 fcfs_writeTest();
             }
-            
+            return "";
         }
 
         if (cmd == "exit") exit(0);
