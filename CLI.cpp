@@ -1,6 +1,7 @@
 /** 
  * CSOPESY Command Line Interface 
 */
+#include "ProcessSMI.h"
 #include "ScreenManager.h"
 #include <iostream> 
 #include <fstream>
@@ -458,7 +459,9 @@ string processCommand(const string& cmd) {
 
         if (cmd == "process-smi"){
             //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
-
+            std::thread snap(process_smi::printSnapshot); 
+            snap.detach(); 
+            return "";
         }
 
         if (cmd == "report-util"){
