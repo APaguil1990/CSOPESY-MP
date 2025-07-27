@@ -25,6 +25,7 @@ struct RR_PCB {
     std::chrono::system_clock::time_point finish_time; 
     int assigned_core = -1; 
     std::vector<std::string> log_file; 
+    std::size_t memory_size;
 }; 
 
 extern std::vector<std::shared_ptr<RR_PCB>> rr_g_running_processes; 

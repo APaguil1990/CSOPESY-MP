@@ -405,19 +405,17 @@ void rr_write_processes() {
     outfile.close();
 }
 
-
-
-
-
-void rr_create_process(std::string processName) {
+void rr_create_process(std::string processName, std::size_t memory_size) {
     // Create a new process
     std::shared_ptr<RR_PCB> pcb;
     {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
         
-        pcb = std::make_shared<RR_PCB>(cpuClocks);
+        // pcb = std::make_shared<RR_PCB>(cpuClocks); 
+        pcb = std::make_shared<RR_PCB>();
         pcb->start_time = std::chrono::system_clock::now();
-        pcb->processName = processName;
+        pcb->processName = processName; 
+        pcb->memory_size = memory_size;
 
         std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
         std::uniform_int_distribution<> instruction_rand(0, 5);
@@ -478,8 +476,10 @@ void rr_create_processes() {
             {
                 std::lock_guard<std::mutex> lock(rr_g_process_mutex);
                 
-                pcb = std::make_shared<RR_PCB>(cpuClocks);
-                pcb->start_time = std::chrono::system_clock::now();
+                // pcb = std::make_shared<RR_PCB>(cpuClocks); 
+                pcb = std::make_shared<RR_PCB>();
+                pcb->start_time = std::chrono::system_clock::now(); 
+                pcb->memory_size = 64; // Default size
 
                 std::stringstream tempString;
                 tempString << "process" << pcb->id;

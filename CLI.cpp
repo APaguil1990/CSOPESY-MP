@@ -260,9 +260,10 @@ void fcfs_writeTest(){
     fcfs_write_processes();
 }
 
-void rr_nameProcess(std::string processName) {
-    void rr_create_process(std::string processName);
-    rr_create_process(processName);
+// Modifed: Added memory_size parameter
+void rr_nameProcess(std::string processName, size_t memory_size) {
+    void rr_create_process(std::string processName, size_t memory_size);
+    rr_create_process(processName, memory_size);
 }
 
 /**
@@ -319,7 +320,13 @@ bool readConfig(){
     return true;
 }
 
+// Validates memory size 
+bool isValidMemorySize(size_t size) {
+    if (size < 64 || size > 65536) return false; 
 
+    // Check if size is power of 2 
+    return (size & (size - 1)) == 0; 
+}
 
 /**
  * Processes user commands and return response 
@@ -370,11 +377,25 @@ string processCommand(const string& cmd) {
 
     // Handle screen commands 
     if (tokens[0] == "screen" && initFlag == true) {
-        if (tokens[1] == "-s" ) {
+        // Modified: Added memory size handling for screen -s
+        if (tokens.size() >= 4 &&  tokens[1] == "-s") {
             if (process_maker_running) {
-                manager->createScreen(tokens[2]); 
-                rr_nameProcess(tokens[2]);
-                return "Created screen: " + tokens[2];
+                try {
+                    size_t mem_size = stoull(tokens[3]); 
+
+                    if (!isValidMemorySize(mem_size)) {
+                        return "Invalid memory allocation: must be power of 2 between 64-65536 bytes.";
+                    } 
+                    manager->createScreen(tokens[2]); 
+                    // Moddified: Pass memory size to process creation 
+                    rr_nameProcess(tokens[2], mem_size); 
+                    return "Created process: " + tokens[2] + " with " + tokens[3] + " bytes";
+                } catch(...) {
+                    return "Invalid memory size format.";
+                }
+                // manager->createScreen(tokens[2]); 
+                // rr_nameProcess(tokens[2]);
+                // return "Created screen: " + tokens[2];
             } else {
                 return "scheduler has not been started yet!";
             }
