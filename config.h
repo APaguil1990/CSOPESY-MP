@@ -22,8 +22,6 @@ extern unsigned short variable_b;
 extern unsigned short variable_c;
 
 extern int cpuClocks;
-extern int pagedIn;
-extern int pagedOut;
 
 extern bool process_maker_running;
 

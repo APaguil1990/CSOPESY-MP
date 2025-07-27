@@ -2,6 +2,7 @@
  * CSOPESY Command Line Interface 
 */
 #include "ScreenManager.h"
+#include "vmstat.h"
 #include <iostream> 
 #include <fstream>
 #include <string> 
@@ -10,6 +11,7 @@
 #include <algorithm> 
 #include <thread>
 #include <sstream>
+#include <atomic>
 
 using namespace std;
 
@@ -313,18 +315,17 @@ bool readConfig(){
     return true;
 }
 
-bool vmstat(){
+bool vmStat(){
     //prototype
-    // usedMem = rr_g_memory_processes.size()(will get this) * MEM_PER_PROC
-
-    cout << "Total memory     : " << MAX_OVERALL_MEM << " bytes\n";
-    // cout << "Used memory      : " << c << " bytes\n";
-    // cout << "Free memory      : " << usedMem - MAX_OVERALL_MEM << " bytes\n";
-    // cout << "Idle CPU ticks   : " << idleTicks << "\n";
-    // cout << "Active CPU ticks : " << activeTicks << "\n";
-    // cout << "Total CPU ticks  : " << totalTicks << "\n";
-    // cout << "Num paged in     : " << pagedIn << "\n";
-    // cout << "Num paged out    : " << pagedOut << "\n";
+    cout << " ";
+    cout << "Total memory     : " << get_total_memory() << " bytes\n";
+    cout << "Used memory      : " << get_used_memory() << " bytes\n";
+    cout << "Free memory      : " << get_free_memory() << " bytes\n";
+    cout << "Idle CPU ticks   : " << get_idle_cpu_ticks() << "\n";
+    cout << "Active CPU ticks : " << get_active_cpu_ticks() << "\n";
+    cout << "Total CPU ticks  : " << get_total_cpu_ticks() << "\n";
+    cout << "Num paged in     : " << get_pages_paged_in() << "\n";
+    cout << "Num paged out    : " << get_pages_paged_out() << "\n";
     return true;
 }
 
@@ -456,7 +457,7 @@ string processCommand(const string& cmd) {
 
         if (cmd == "vmstat"){
             //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
-            if(vmstat() == false){
+            if(vmStat() == false){
                 return "error: cannot retrieve information for vmstat"; 
             }
             return "";
