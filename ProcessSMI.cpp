@@ -1,3 +1,4 @@
+
 #include <iostream> 
 #include <iomanip> 
 #include <sstream> 
@@ -9,9 +10,9 @@
 #include "ProcessSMI.h" 
 #include "RR.h"
 
-// You must declare this mutex globally, for example in your main.cpp
-// std::mutex g_cout_mutex; 
-// Then declare it as 'extern' in headers where it's needed.
+// You must define 'g_cout_mutex' in a global scope (e.g., main.cpp)
+// and declare it 'extern' in any file that uses it.
+// Example definition: std::mutex g_cout_mutex;
 extern std::mutex g_cout_mutex;
 
 extern int CPU_COUNT; 
@@ -71,53 +72,101 @@ std::string formatMemory(std::size_t bytes) {
 
 }
 
+// void process_smi::printSnapshot() {
+//     // FIX: Adjusted HR length to match the image's layout.
+//     constexpr const char* HR = "---------------------------------------------\n"; 
+//     std::stringstream oss;
+
+//     int busyCores;
+//     std::size_t usedBytes;
+//     std::vector<std::shared_ptr<RR_PCB>> running_processes_copy;
+    
+//     {
+//         std::lock_guard<std::mutex> lock(rr_g_process_mutex); 
+        
+//         // CPU 
+//         busyCores = 0; 
+//         for (const auto& p : rr_g_running_processes) if (p) ++busyCores;
+        
+//         // Memory 
+//         usedBytes = 0; 
+//         for (const auto& p : rr_g_memory_processes) {
+//             if (p) usedBytes += p->memory_size;
+//         } 
+        
+//         running_processes_copy = rr_g_running_processes;
+//     }
+    
+//     int cpuUtil = CPU_COUNT ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0; 
+//     auto totalBytes = static_cast<std::size_t>(MAX_OVERALL_MEM); 
+//     int memUtil = totalBytes ? static_cast<int>(100.0 * usedBytes / totalBytes) : 0;
+
+//     // Output
+//     // FIX: Adjusted spacing for CPU-Util and Memory Util to align all values.
+//     oss << '\n' << HR 
+//               << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n\n" 
+//               << "CPU-Util:     "   << std::setw(3) << cpuUtil << "%\n" 
+//               << "Memory Usage: "   << formatMemory(usedBytes) 
+//               << " / "              << formatMemory(totalBytes) << '\n' 
+//               << "Memory Util:  "   << std::setw(3) << memUtil << "%\n\n" 
+//               << "Running Processes and Memory Usage:\n" 
+//               << HR;
+    
+//     // List running processes 
+//     for (const auto& p : running_processes_copy) {
+//         if (!p) continue; 
+//         // FIX: Changed setw from 12 to 13 to match image's padding.
+//         oss << std::left << std::setw(13) << p->processName << formatMemory(p->memory_size) << '\n'; 
+//     }
+//     oss << HR;
+
+//     {
+//         std::lock_guard<std::mutex> cout_lock(g_cout_mutex);
+//         std::cout << oss.str() << std::flush;
+//     }
+// }
+
+// snapshot 2
 void process_smi::printSnapshot() {
-    constexpr const char* HR = "-------------------------------------------------------------\n"; 
-    std::stringstream oss;
+    constexpr const char* HR = "-------------------------------------------------------------\n";
+    std::ostringstream oss;
 
-    int busyCores;
-    std::size_t usedBytes;
-    std::vector<std::shared_ptr<RR_PCB>> running_processes_copy;
-    
+    /* ── Gather data under lock ─────────────────────────────── */
+    int busyCores           = 0;
+    std::size_t usedBytes   = 0;
+    std::vector<std::shared_ptr<RR_PCB>> running_copy;
+
     {
-        std::lock_guard<std::mutex> lock(rr_g_process_mutex); 
-        
-        // CPU 
-        busyCores = 0; 
+        std::lock_guard<std::mutex> lk(rr_g_process_mutex);
+
         for (const auto& p : rr_g_running_processes) if (p) ++busyCores;
-        
-        // Memory 
-        usedBytes = 0; 
-        for (const auto& p : rr_g_memory_processes) {
-            if (p) usedBytes += p->memory_size;
-        } 
-        
-        running_processes_copy = rr_g_running_processes;
+        for (const auto& p : rr_g_memory_processes)  if (p) usedBytes += p->memory_size; // ← your PCB field
+        running_copy = rr_g_running_processes;               // shallow copy
     }
-    
-    int cpuUtil = CPU_COUNT ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0; 
-    auto totalBytes = static_cast<std::size_t>(MAX_OVERALL_MEM); 
-    int memUtil = totalBytes ? static_cast<int>(100.0 * usedBytes / totalBytes) : 0;
 
-    // Output
-    oss << '\n' << HR 
-              << "| PROCESS-SMI V01.00 Driver Version: 01.00 | \n\n" 
-              << "CPU-Util:  "      << std::setw(3) << cpuUtil << "%\n" 
-              << "Memory Usage: "   << formatMemory(usedBytes) 
-              << " / "              << formatMemory(totalBytes) << '\n' 
-              << "Memory Util: "    << std::setw(3) << memUtil << "%\n\n" 
-              << "Running Processes and Memory Usage:\n" 
-              << HR;
-    
-    // List running processes 
-    for (const auto& p : running_processes_copy) {
-        if (!p) continue; 
-        oss << std::left << std::setw(12) << p->processName << formatMemory(p->memory_size) << '\n'; 
-    }
-    oss << HR;
+    int cpuUtil   = CPU_COUNT ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
+    std::size_t totalBytes = static_cast<std::size_t>(MAX_OVERALL_MEM);
+    int memUtil   = totalBytes ? static_cast<int>(100.0 * usedBytes / totalBytes) : 0;
 
-    {
-        std::lock_guard<std::mutex> cout_lock(g_cout_mutex);
-        std::cout << oss.str() << std::flush;
+    /* ── Build the pretty string ─────────────────────────────── */
+    oss << '\n'           // start on new line (after the prompt)
+        << HR
+        << "| PROCESS-SMI V01.00  Driver Version: 01.00 |\n\n"
+        << "CPU-Util:  "    << std::setw(3) << cpuUtil   << "%\n"
+        << "Memory Usage: " << formatMemory(usedBytes)
+        << " / "            << formatMemory(totalBytes)  << '\n'
+        << "Memory Util: "  << std::setw(3) << memUtil   << "%\n\n"
+        << "Running Processes and Memory Usage:\n"
+        << HR;
+
+    for (const auto& p : running_copy) {
+        if (!p) continue;
+        oss << std::left << std::setw(12) << p->processName
+            << formatMemory(p->memory_size) << '\n';
     }
+    oss << HR << std::flush;
+
+    /* ── Atomically write to console ─────────────────────────── */
+    std::lock_guard<std::mutex> cout_lk(g_cout_mutex);
+    std::cout << oss.str() << std::endl;   // final endl to flush & move prompt
 }

@@ -480,8 +480,13 @@ string processCommand(const string& cmd) {
 
         if (cmd == "process-smi"){
             //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
-            std::thread snap(process_smi::printSnapshot); 
-            snap.detach(); 
+            // std::thread snap(process_smi::printSnapshot); 
+            // snap.detach(); 
+            // return "";
+
+            std::cout << '\n'; 
+            process_smi::printSnapshot(); 
+            std::cout << std::endl; 
             return "";
         }
 
