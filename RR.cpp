@@ -19,6 +19,7 @@
 #include "ScreenManager.h"
 #include "config.h"
 
+std::mutex g_cout_mutex;
 // --- Configuration ---
 // const int NUM_PROCESSES = 10;
 // const int COMMANDS_PER_PROCESS = 105;
