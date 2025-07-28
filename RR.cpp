@@ -413,7 +413,7 @@ void rr_create_process(std::string processName, std::size_t memory_size) {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
         
         // pcb = std::make_shared<RR_PCB>(cpuClocks); 
-        pcb = std::make_shared<RR_PCB>();
+        pcb = std::make_shared<RR_PCB>(cpuClocks);
         pcb->start_time = std::chrono::system_clock::now();
         pcb->processName = processName; 
         pcb->memory_size = memory_size;
@@ -478,7 +478,7 @@ void rr_create_processes() {
                 std::lock_guard<std::mutex> lock(rr_g_process_mutex);
                 
                 // pcb = std::make_shared<RR_PCB>(cpuClocks); 
-                pcb = std::make_shared<RR_PCB>();
+                pcb = std::make_shared<RR_PCB>(cpuClocks);
                 pcb->start_time = std::chrono::system_clock::now(); 
                 pcb->memory_size = 64; // Default size
 
