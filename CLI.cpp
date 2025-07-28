@@ -316,8 +316,7 @@ bool readConfig(){
 }
 
 bool vmStat(){
-    //prototype
-    cout << " ";
+    cout << "\n";
     cout << "Total memory     : " << get_total_memory() << " bytes\n";
     cout << "Used memory      : " << get_used_memory() << " bytes\n";
     cout << "Free memory      : " << get_free_memory() << " bytes\n";
