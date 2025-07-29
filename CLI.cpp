@@ -348,6 +348,8 @@ bool processsmi(){
 string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 
     vector<string> tokens = tokenize(cmd);
+
+    std::cout << "\n\n\n" << tokens[0];
     
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-start", "marquee",
@@ -388,13 +390,9 @@ string processCommand(const string& cmd) {
     // Handle screen commands 
     if (tokens[0] == "screen" && initFlag == true) {
         if (tokens[1] == "-s" ) {
-            if (process_maker_running) {
-                manager->createScreen(tokens[2]); 
-                rr_nameProcess(tokens[2]);
-                return "Created screen: " + tokens[2];
-            } else {
-                return "scheduler has not been started yet!";
-            }
+            manager->createScreen(tokens[2]); 
+            rr_nameProcess(tokens[2]);
+            return "Created screen: " + tokens[2];
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
                 manager->attachScreen(tokens[2]); 
