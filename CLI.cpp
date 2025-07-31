@@ -2,6 +2,7 @@
  * CSOPESY Command Line Interface 
 */
 #include "ScreenManager.h"
+#include "vmstat.h"
 #include <iostream> 
 #include <fstream>
 #include <string> 
@@ -10,6 +11,7 @@
 #include <algorithm> 
 #include <thread>
 #include <sstream>
+#include <atomic>
 
 using namespace std;
 
@@ -318,7 +320,23 @@ bool readConfig(){
     return true;
 }
 
+bool vmStat(){
+    cout << "\n";
+    cout << "Total memory     : " << get_total_memory() << " bytes\n";
+    cout << "Used memory      : " << get_used_memory() << " bytes\n";
+    cout << "Free memory      : " << get_free_memory() << " bytes\n";
+    cout << "Idle CPU ticks   : " << get_idle_cpu_ticks() << "\n";
+    cout << "Active CPU ticks : " << get_active_cpu_ticks() << "\n";
+    cout << "Total CPU ticks  : " << get_total_cpu_ticks() << "\n";
+    cout << "Num paged in     : " << get_pages_paged_in() << "\n";
+    cout << "Num paged out    : " << get_pages_paged_out() << "\n";
+    return true;
+}
 
+bool processsmi(){
+    
+    return true;
+}
 
 /**
  * Processes user commands and return response 
@@ -453,12 +471,18 @@ string processCommand(const string& cmd) {
 
         if (cmd == "vmstat"){
             //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
-            
+            if(vmStat() == false){
+                return "error: cannot retrieve information for vmstat"; 
+            }
+            return "";
         }
 
         if (cmd == "process-smi"){
             //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
-
+             if(processsmi() == false){
+                return "error: cannot retrieve information for process-smi"; 
+            }
+            return "used process-smi";
         }
 
         if (cmd == "report-util"){
@@ -467,7 +491,7 @@ string processCommand(const string& cmd) {
             } else if (scheduler == "fcfs") {
                 fcfs_writeTest();
             }
-            
+            return "";
         }
 
         if (cmd == "exit") exit(0);

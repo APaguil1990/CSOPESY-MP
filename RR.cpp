@@ -17,6 +17,7 @@
 
 #include "ScreenManager.h"
 #include "config.h"
+#include "vmstat.h"
 
 // --- Configuration ---
 // const int NUM_PROCESSES = 10;
@@ -109,7 +110,8 @@ void rr_declareCommand() {
 
 void display_memory() {
     int i = 4;
-
+    
+    compute_used_memory(rr_g_memory_processes.size());
     std::ostringstream filename;
     filename << "memory_stamp_" << memoryCycle << ".txt";
 
@@ -181,6 +183,7 @@ void rr_scheduler_thread_func() {
                     // Add to memory if not already present
                     if (rr_g_memory_processes.find(process) == rr_g_memory_processes.end()) {
                         rr_g_memory_processes.insert(process);
+                        vmstats_increment_paged_in();
                     }
                     
                     // Schedule the process
@@ -216,6 +219,7 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 const std::string& command = my_process->commands[my_process->program_counter];
                 auto now = std::chrono::system_clock::now();
 
+                vmstats_increment_active_ticks();
 
                 if (command.compare("declare") == 0) {
                     rr_declareCommand();
@@ -274,12 +278,14 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 rr_g_running_processes[core_id] = nullptr;
 
                 rr_g_memory_processes.erase(my_process);
-
+                vmstats_increment_paged_out();
+                
                 rr_g_scheduler_cv.notify_one();
             }
             lock.unlock();
 
         } else {
+            vmstats_increment_idle_ticks();
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
