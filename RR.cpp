@@ -15,20 +15,22 @@
 #include <random>
 #include <unordered_set>
 
+#include "RR.h"
 #include "ScreenManager.h"
 #include "config.h"
 #include "vmstat.h"
 
+std::mutex g_cout_mutex;
 // --- Configuration ---
 // const int NUM_PROCESSES = 10;
 // const int COMMANDS_PER_PROCESS = 105;
 
 // --- Process State ---
-enum class ProcessState {
-    READY,
-    RUNNING,
-    FINISHED
-};
+// enum class ProcessState {
+//     READY,
+//     RUNNING,
+//     FINISHED
+// };
 
 // struct frame {
 //     int max_memory = MEM_PER_FRAME; // cant get declared properly here because of how the initialize commands work, needs a check
@@ -37,31 +39,31 @@ enum class ProcessState {
 // };
 
 // --- Process Control Block (PCB) ---
-struct RR_PCB {
-    int id;
-    std::string processName = "";
-    int commands_executed_this_quantum;
-    ProcessState state;
-    std::vector<std::string> commands;
-    size_t program_counter = 0;
-    std::chrono::system_clock::time_point start_time;
-    std::chrono::system_clock::time_point finish_time;
-    int assigned_core = -1;
-    std::vector<std::string> log_file;
+// struct RR_PCB { 
+//     int id;
+//     std::string processName = "";
+//     int commands_executed_this_quantum;
+//     ProcessState state;
+//     std::vector<std::string> commands;
+//     size_t program_counter = 0;
+//     std::chrono::system_clock::time_point start_time;
+//     std::chrono::system_clock::time_point finish_time;
+//     int assigned_core = -1;
+//     std::vector<std::string> log_file;
 
-    // std::ofstream log_file;
-    // RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
-    //     std::stringstream ss;
-    //     ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
-    //     log_file.open(ss.str());
-    // }
+//     // std::ofstream log_file;
+//     // RR_PCB(int pid) : id(pid), state(ProcessState::READY) {
+//     //     std::stringstream ss;
+//     //     ss << "process" << (id < 10 ? "0" : "") << id << ".txt";
+//     //     log_file.open(ss.str());
+//     // }
 
-    // ~RR_PCB() {
-    //     if (log_file.is_open()) {
-    //         log_file.close();
-    //     }
-    // }
-};
+//     // ~RR_PCB() {
+//     //     if (log_file.is_open()) {
+//     //         log_file.close();
+//     //     }
+//     // }
+// };
 
 // std::vector<std::shared_ptr<frame>> rr_memory_block(2048, nullptr); // unknown max possible frames? maybe a different data struct can handle this better
 int memoryCycle = 0;
@@ -88,6 +90,16 @@ std::string rr_format_time(const std::chrono::system_clock::time_point& tp, cons
     std::stringstream ss;
     ss << std::put_time(&tm, fmt.c_str());
     return ss.str();
+} 
+
+std::vector<std::string> rr_getRunningProcessNames() {
+    std::lock_guard<std::mutex> lock(rr_g_process_mutex); 
+    std::vector<std::string> out; 
+
+    for (const auto& p : rr_g_running_processes) {
+        if (p) out.emplace_back(p->processName);
+    } 
+    return out;
 }
 
 void rr_declareCommand() {
@@ -400,19 +412,17 @@ void rr_write_processes() {
     outfile.close();
 }
 
-
-
-
-
-void rr_create_process(std::string processName) {
+void rr_create_process(std::string processName, std::size_t memory_size) {
     // Create a new process
     std::shared_ptr<RR_PCB> pcb;
     {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
         
+        // pcb = std::make_shared<RR_PCB>(cpuClocks); 
         pcb = std::make_shared<RR_PCB>(cpuClocks);
         pcb->start_time = std::chrono::system_clock::now();
-        pcb->processName = processName;
+        pcb->processName = processName; 
+        pcb->memory_size = memory_size;
 
         std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
         std::uniform_int_distribution<> instruction_rand(0, 5);
@@ -473,8 +483,10 @@ void rr_create_processes() {
             {
                 std::lock_guard<std::mutex> lock(rr_g_process_mutex);
                 
+                // pcb = std::make_shared<RR_PCB>(cpuClocks); 
                 pcb = std::make_shared<RR_PCB>(cpuClocks);
-                pcb->start_time = std::chrono::system_clock::now();
+                pcb->start_time = std::chrono::system_clock::now(); 
+                pcb->memory_size = 64; // Default size
 
                 std::stringstream tempString;
                 tempString << "process" << pcb->id;
