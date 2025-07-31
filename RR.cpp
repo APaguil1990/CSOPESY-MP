@@ -286,23 +286,40 @@ void rr_core_worker_func(int core_id) { // executes cmds
 }
 
 // find process for screen -r (log file in memory)
-// void rr_search_process(std::string process_search) {
-//     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-//     std::cout << "\n-------------------------------------------------------------\n";
+void rr_search_process(std::string process_search) {
+    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+    std::stringstream tempString;
+    std::vector<std::shared_ptr<RR_PCB>> search_vector;
+    std::shared_ptr<RR_PCB> process;
 
-//     for (const auto& p : rr_g_ready_queue) {
-//         std::stringstream tempString;
-//         tempString << "process" << p->id;
+    std::cout << "\n-------------------------------------------------------------\n";
 
-//         if (process_search.compare(p->processName) == 0 || process_search.compare(tempString.str()) == 0) {
-//             for(const std::string& line : p->log_file) {
-//                 std::cout << line << std::endl;
-//             }
-//         }
-//     }
-//     std::cout << "-------------------------------------------------------------\n\n";
-//     std::cout << process_search;
-// }
+    search_vector.insert(search_vector.end(), rr_g_ready_queue.begin(), rr_g_ready_queue.end());
+    search_vector.insert(search_vector.end(), rr_g_running_processes.begin(), rr_g_running_processes.end());
+    
+    
+
+    for (const auto& p : search_vector) {
+        tempString << "process" << p->id;
+
+        if (process_search.compare(p->processName) == 0) {
+            process = p;
+            break;
+        }
+
+        if (!p) {
+            break; // CRASHES WHEN NOT FOUND
+        }
+    }
+
+    for(const std::string& line : process->log_file) {
+        std::cout << line << std::endl;
+    }
+
+    std::cout << "\n-------------------------------------------------------------\n";
+
+    std::cout << "HELP";
+}
 
 // --- UI Function to Display Process Lists ---
 void rr_display_processes() {

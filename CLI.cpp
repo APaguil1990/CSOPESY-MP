@@ -235,8 +235,8 @@ void rr_generate_processes() {
 }
 
 void rr_searchTest(std::string processName) {
-    // void rr_search_process(std::string processName);
-    // rr_search_process(processName);
+    void rr_search_process(std::string processName);
+    rr_search_process(processName);
 }
 
 void rr_displayTest(){
@@ -395,9 +395,10 @@ string processCommand(const string& cmd) {
             return "Created screen: " + tokens[2];
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
-                manager->attachScreen(tokens[2]); 
+                std::cout << "\n\n\nsearch start";
                 rr_searchTest(tokens[2]);
-                return "";
+                std:: cout << "\n\n\nsearch end";
+                // return "SEARCH RUN";
             } else {
                 return "Screen not found: " + tokens[2]; 
             }
