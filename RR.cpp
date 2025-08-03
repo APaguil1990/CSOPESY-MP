@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <iostream>
 #include <ostream>
 #include <vector>
@@ -290,31 +291,35 @@ void rr_search_process(std::string process_search) {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
     std::stringstream tempString;
     std::vector<std::shared_ptr<RR_PCB>> search_vector;
-    std::shared_ptr<RR_PCB> process;
+    std::shared_ptr<RR_PCB> process = nullptr;
 
     std::cout << "\n-------------------------------------------------------------\n";
 
-    search_vector.insert(search_vector.end(), rr_g_ready_queue.begin(), rr_g_ready_queue.end());
-    search_vector.insert(search_vector.end(), rr_g_running_processes.begin(), rr_g_running_processes.end());
-    
-    
+    if (!rr_g_ready_queue.empty() || rr_g_running_processes.front() != nullptr) {
+        search_vector.insert(search_vector.end(), rr_g_ready_queue.begin(), rr_g_ready_queue.end());
+        search_vector.insert(search_vector.end(), rr_g_running_processes.begin(), rr_g_running_processes.end());
 
-    for (const auto& p : search_vector) {
-        tempString << "process" << p->id;
-
-        if (process_search.compare(p->processName) == 0) {
-            process = p;
-            break;
+        for (const auto& p : search_vector) {
+            if (process_search.compare(p->processName) == 0) {
+                process = p;
+                break;
+            }
         }
 
-        if (!p) {
-            break; // CRASHES WHEN NOT FOUND
+        if (process != nullptr) {
+            for(const std::string& line : process->log_file) {
+                std::cout << line << std::endl;
+            }
+        } else {
+            std::cout << "Process not found" << std::endl;
         }
+
+
+    } else {
+        std::cout << "Currently no processes running or waiting to run";
     }
 
-    for(const std::string& line : process->log_file) {
-        std::cout << line << std::endl;
-    }
+    
 
     std::cout << "\n-------------------------------------------------------------\n";
 

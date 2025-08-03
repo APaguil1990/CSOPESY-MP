@@ -349,8 +349,6 @@ string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 
     vector<string> tokens = tokenize(cmd);
 
-    std::cout << "\n\n\n" << tokens[0];
-    
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-start", "marquee",
         "scheduler-stop", "report-util", "vmstat", "process-smi", "clear", "exit"
@@ -395,10 +393,8 @@ string processCommand(const string& cmd) {
             return "Created screen: " + tokens[2];
         } else if (tokens[1] == "-r") {
             if (manager->screenExists(tokens[2])) {
-                std::cout << "\n\n\nsearch start";
                 rr_searchTest(tokens[2]);
-                std:: cout << "\n\n\nsearch end";
-                // return "SEARCH RUN";
+                return "";
             } else {
                 return "Screen not found: " + tokens[2]; 
             }
