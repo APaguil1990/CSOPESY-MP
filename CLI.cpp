@@ -238,8 +238,8 @@ void rr_generate_processes() {
 }
 
 void rr_searchTest(std::string processName) {
-    // void rr_search_process(std::string processName);
-    // rr_search_process(processName);
+    void rr_search_process(std::string processName);
+    rr_search_process(processName);
 }
 
 void rr_displayTest(){
@@ -352,7 +352,7 @@ bool vmStat(){
 string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 
     vector<string> tokens = tokenize(cmd);
-    
+
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-start", "marquee",
         "scheduler-stop", "report-util", "vmstat", "process-smi", "clear", "exit"
@@ -393,7 +393,6 @@ string processCommand(const string& cmd) {
     if (tokens[0] == "screen" && initFlag == true) {
         // Modified: Added memory size handling for screen -s
         if (tokens.size() >= 4 &&  tokens[1] == "-s") {
-            if (process_maker_running) {
                 try {
                     size_t mem_size = stoull(tokens[3]); 
 
@@ -410,17 +409,9 @@ string processCommand(const string& cmd) {
                 // manager->createScreen(tokens[2]); 
                 // rr_nameProcess(tokens[2]);
                 // return "Created screen: " + tokens[2];
-            } else {
-                return "scheduler has not been started yet!";
-            }
         } else if (tokens[1] == "-r") {
-            if (manager->screenExists(tokens[2])) {
-                manager->attachScreen(tokens[2]); 
-                rr_searchTest(tokens[2]);
-                return "";
-            } else {
-                return "Screen not found: " + tokens[2]; 
-            }
+            rr_searchTest(tokens[2]);
+            return "";
         } else if (tokens[1] == "-ls") {
             if (scheduler == "fcfs") {
                 fcfs_displayTest();
