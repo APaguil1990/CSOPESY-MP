@@ -299,12 +299,20 @@ void rr_search_process(std::string process_search) {
         search_vector.insert(search_vector.end(), rr_g_ready_queue.begin(), rr_g_ready_queue.end());
         search_vector.insert(search_vector.end(), rr_g_running_processes.begin(), rr_g_running_processes.end());
 
+        std::cout << "process search start" << std::endl;
         for (const auto& p : search_vector) {
+            int i = 0;
             if (process_search.compare(p->processName) == 0) {
                 process = p;
+                std::cout << "process found" << std::endl;
+                break;
+            }
+            i++;
+            if (i < search_vector.size()) {
                 break;
             }
         }
+        std::cout << "process search end" << std::endl;
 
         if (process != nullptr) {
             for(const std::string& line : process->log_file) {

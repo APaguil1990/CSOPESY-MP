@@ -392,12 +392,8 @@ string processCommand(const string& cmd) {
             rr_nameProcess(tokens[2]);
             return "Created screen: " + tokens[2];
         } else if (tokens[1] == "-r") {
-            if (manager->screenExists(tokens[2])) {
-                rr_searchTest(tokens[2]);
-                return "";
-            } else {
-                return "Screen not found: " + tokens[2]; 
-            }
+            rr_searchTest(tokens[2]);
+            return "";
         } else if (tokens[1] == "-ls") {
             if (scheduler == "fcfs") {
                 fcfs_displayTest();
