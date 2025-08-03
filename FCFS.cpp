@@ -13,6 +13,8 @@
 #include <sstream>
 #include <random>
 
+#include "Process.h"
+#include "MemoryManager.h"
 #include "ScreenManager.h"
 #include "config.h"
 
@@ -20,38 +22,21 @@
 const int NUM_PROCESSES = 10;
 const int COMMANDS_PER_PROCESS = 100;
 
-// --- Process State ---
-enum class ProcessState {
-    READY,
-    RUNNING,
-    FINISHED
-};
 
-// --- Process Control Block (PCB) ---
-struct FCFS_PCB {
-    int id;
-    std::string processName = "";
-    ProcessState state;
-    std::vector<std::string> commands;
-    size_t program_counter = 0;
-    std::chrono::system_clock::time_point start_time;
-    std::chrono::system_clock::time_point finish_time;
-    int assigned_core = -1;
-    std::vector<std::string> log_file;
-};
 
 std::random_device rd;  // a seed source for the random number engine
 std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
-// --- Shared Data Structures ---
-std::deque<std::shared_ptr<FCFS_PCB>> fcfs_g_ready_queue;
-std::vector<std::shared_ptr<FCFS_PCB>> fcfs_g_running_processes(CPU_COUNT, nullptr);
-std::vector<std::shared_ptr<FCFS_PCB>> fcfs_g_finished_processes;
+extern std::deque<std::shared_ptr<Process>> fcfs_g_ready_queue;
+extern std::vector<std::shared_ptr<Process>> fcfs_g_running_processes;
+extern std::vector<std::shared_ptr<Process>> fcfs_g_finished_processes;
+extern std::deque<std::shared_ptr<Process>> fcfs_g_blocked_queue; // New queue
 
-// --- Synchronization Primitives ---
-std::mutex fcfs_g_process_mutex;
-std::condition_variable fcfs_g_scheduler_cv;
-std::atomic<bool> fcfs_g_is_running(true);
+extern std::mutex fcfs_g_process_mutex;
+extern std::condition_variable fcfs_g_scheduler_cv;
+extern std::atomic<bool> fcfs_g_is_running;
+
+extern MemoryManager memory_manager;
 
 // --- Helper Function to Format Time ---
 std::string fcfs_format_time(const std::chrono::system_clock::time_point& tp, const std::string& fmt) {
@@ -99,9 +84,23 @@ void fcfs_forCommand() {
 }
 
 // --- Scheduler Thread Function ---
+// --- MODIFIED: Scheduler now handles unblocking processes ---
 void fcfs_scheduler_thread_func() {
     while (fcfs_g_is_running) {
         std::unique_lock<std::mutex> lock(fcfs_g_process_mutex);
+
+        // --- NEW: Unblock processes that finished I/O ---
+        // This simulates the OS getting a notification from the disk
+        // that a page has been loaded into RAM.
+        while (!fcfs_g_blocked_queue.empty()) {
+            std::shared_ptr<Process> unblocked_process = fcfs_g_blocked_queue.front();
+            fcfs_g_blocked_queue.pop_front();
+            unblocked_process->state = ProcessState::READY;
+            fcfs_g_ready_queue.push_back(unblocked_process);
+        }
+
+        // --- ORIGINAL LOGIC (Unchanged) ---
+        // The condition to wake up and schedule is the same.
         fcfs_g_scheduler_cv.wait(lock, [&]() {
             if (!fcfs_g_is_running) return true;
             bool core_is_free = false;
@@ -116,9 +115,11 @@ void fcfs_scheduler_thread_func() {
 
         if (!fcfs_g_is_running) break;
 
+        // --- MODIFIED: Assigns the new 'Process' type ---
+        // The scheduling logic itself is the same as your original.
         for (int i = 0; i < CPU_COUNT; ++i) {
             if (fcfs_g_running_processes[i] == nullptr && !fcfs_g_ready_queue.empty()) {
-                std::shared_ptr<FCFS_PCB> process = fcfs_g_ready_queue.front();
+                std::shared_ptr<Process> process = fcfs_g_ready_queue.front();
                 fcfs_g_ready_queue.pop_front();
                 process->state = ProcessState::RUNNING;
                 process->assigned_core = i;
@@ -129,62 +130,84 @@ void fcfs_scheduler_thread_func() {
 }
 
 // --- CPU Worker Thread Function ---
+// --- MODIFIED: CPU worker now handles memory access, page faults, and segfaults for FCFS ---
 void fcfs_core_worker_func(int core_id) {
     while (fcfs_g_is_running) {
-        std::shared_ptr<FCFS_PCB> my_process = nullptr;
+        std::shared_ptr<Process> my_process = nullptr;
         {
             std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
             my_process = fcfs_g_running_processes[core_id];
         }
 
         if (my_process) {
-            // This is the "print command" execution
-            if (my_process->program_counter < my_process->commands.size()) {
-                const std::string& command = my_process->commands[my_process->program_counter];
-                auto now = std::chrono::system_clock::now();
+            // --- NEW: Inner loop to run a process until it finishes, blocks, or terminates ---
+            while (my_process->program_counter < my_process->commands.size()) {
+                const std::string& command_str = my_process->commands[my_process->program_counter];
+                
+                std::istringstream iss(command_str);
+                std::string command_token;
+                iss >> command_token;
 
+                if (command_token == "read" || command_token == "write") {
+                    int address;
+                    iss >> std::hex >> address;
+                    bool is_write_op = (command_token == "write");
 
+                    // Core call to the Memory Manager
+                    char* physical_ptr = memory_manager.access_memory(*my_process, address, is_write_op);
 
-                if (command.compare("declare") == 0) {
-                    fcfs_declareCommand();
+                    // Outcome 1: Segmentation Fault
+                    if (my_process->mem_data.terminated_by_error) {
+                        std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+                        std::cout << "\nProcess " << my_process->processName << " terminated: " << my_process->mem_data.termination_reason << std::endl;
+                        my_process->state = ProcessState::FINISHED;
+                        fcfs_g_finished_processes.push_back(my_process);
+                        fcfs_g_running_processes[core_id] = nullptr;
+                        memory_manager.deallocate_for_process(*my_process);
+                        fcfs_g_scheduler_cv.notify_one();
+                        goto next_process_loop; // Break out to get a new process.
+                    } 
                     
-                } else if (command.compare("add") == 0) {
-                    fcfs_addCommand();
+                    // Outcome 2: Page Fault
+                    if (physical_ptr == nullptr) {
+                        std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+                        // The MemoryManager set the state to BLOCKED. Move it to the blocked queue.
+                        fcfs_g_blocked_queue.push_back(my_process);
+                        fcfs_g_running_processes[core_id] = nullptr;
+                        fcfs_g_scheduler_cv.notify_one();
+                        goto next_process_loop; // Break out to get a new process.
+                    }
 
-                } else if (command.compare("sub") == 0) {
-                    fcfs_subtractCommand();
-
-                } else if (command.compare("sleep") == 0) {
-                    fcfs_sleepCommand();
-
-                } else if (command.compare("for") == 0) {
-                    fcfs_forCommand();
-
+                    // Outcome 3: Success
+                    if (is_write_op) {
+                        int value_to_write;
+                        iss >> value_to_write;
+                        *(reinterpret_cast<uint16_t*>(physical_ptr)) = static_cast<uint16_t>(value_to_write);
+                    } else { /* Read logic could be added here */ }
 
                 } else {
-                    std::ostringstream tempString;
-                    tempString << "(" << fcfs_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                               << " \"" << command << "\"" << std::endl;
-                    my_process->log_file.push_back(tempString.str());
+                    // This is a non-memory instruction.
                 }
 
-
-
-                my_process->program_counter++;
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                my_process->program_counter++; // Advance to the next instruction on success.
+                std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Your original delay
             }
 
-            if (my_process->program_counter >= my_process->commands.size()) {
+            // If the while loop finishes naturally, the process has completed all its commands.
+            {
                 std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
                 my_process->state = ProcessState::FINISHED;
                 my_process->finish_time = std::chrono::system_clock::now();
                 fcfs_g_finished_processes.push_back(my_process);
                 fcfs_g_running_processes[core_id] = nullptr;
+                memory_manager.deallocate_for_process(*my_process);
                 fcfs_g_scheduler_cv.notify_one();
             }
         } else {
+            // No process assigned to this core.
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
+    next_process_loop:; // The goto label. The loop continues to get the next process.
     }
 }
 
@@ -259,142 +282,101 @@ void fcfs_write_processes() {
 }
 
 
-void fcfs_create_process(std::string processName) {
-    // Create a new process
-    std::shared_ptr<FCFS_PCB> pcb;
+// --- MODIFIED: To use the new Process class and MemoryManager ---
+// Note: This function isn't called by the current CLI for FCFS, but is updated for consistency.
+void fcfs_create_process(std::string processName, size_t memory_size, MemoryManager& mm) {
+    std::shared_ptr<Process> pcb;
     {
         std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
         
-        pcb = std::make_shared<FCFS_PCB>(cpuClocks);
+        // Use the unified 'Process' class
+        pcb = std::make_shared<Process>(cpuClocks++);
         pcb->start_time = std::chrono::system_clock::now();
         pcb->processName = processName;
 
-        std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
-        std::uniform_int_distribution<> instruction_rand(0, 5);
+        // Allocate its memory space in the backing store
+        mm.allocate_for_process(*pcb, memory_size);
 
-        int instructionCount = instructionCount_rand(gen);
-
-        for (int j = 0; j < instructionCount; ++j) {
-            std::stringstream fcfs_command_stream;
-            int instruction = instruction_rand(gen);
-
-            switch (instruction) {
-                case 0: // print
-                    fcfs_command_stream << "Hello world from process " << pcb->processName << "!";
-                    pcb->commands.push_back(fcfs_command_stream.str());
-                    break;
-                case 1: // declare
-                    fcfs_command_stream << "declare";
-                    pcb->commands.push_back(fcfs_command_stream.str());
-                    break;
-                case 2: // add
-                    fcfs_command_stream << "add";
-                    pcb->commands.push_back(fcfs_command_stream.str());
-                    break;
-                case 3: // sub
-                    fcfs_command_stream << "sub";
-                    pcb->commands.push_back(fcfs_command_stream.str());
-                    break;
-                case 4: // sleep
-                    fcfs_command_stream << "sleep";
-                    pcb->commands.push_back(fcfs_command_stream.str());
-                    break;
-                case 5: // for
-                    fcfs_command_stream << "for";
-                    pcb->commands.push_back(fcfs_command_stream.str());
-                    break;
-            }
-            cpuClocks++;
-        }
+        // Add some example memory commands
+        pcb->commands.push_back("write 0x20 99");
+        pcb->commands.push_back("read 0x20");
         
         fcfs_g_ready_queue.push_back(pcb);
     }
-    
-    // Notify scheduler that a new process is available
+
     fcfs_g_scheduler_cv.notify_one();
+
 }
 
 
 // Function that creates processes
+// --- MODIFIED: To use MemoryManager and include robust shutdown logic ---
 void fcfs_create_processes() {
     process_maker_running = true;
-    auto rr_manager = ScreenManager::getInstance();
-
-    // Process Generation Loop
-    while (fcfs_g_is_running) {
-        if (process_maker_running) {
-            // Create a new process
-            std::shared_ptr<FCFS_PCB> pcb;
-            {
-                std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
-                
-                pcb = std::make_shared<FCFS_PCB>(cpuClocks);
-                pcb->start_time = std::chrono::system_clock::now();
-
-                std::stringstream tempString;
-                tempString << "process" << pcb->id;
-
-                pcb->processName = tempString.str();
-
-                std::uniform_int_distribution<> instructionCount_rand(MIN_INS, MAX_INS);
-                std::uniform_int_distribution<> instruction_rand(0, 5);
-
-                int instructionCount = instructionCount_rand(gen);
-
-                for (int j = 0; j < instructionCount; ++j) {
-                    std::stringstream rr_command_stream;
-                    int instruction = instruction_rand(gen);
-
-                    switch (instruction) {
-                        case 0: // print
-                            rr_command_stream << "Hello world from process p" << cpuClocks << "!";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 1: // declare
-                            rr_command_stream << "declare";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 2: // add
-                            rr_command_stream << "add";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 3: // sub
-                            rr_command_stream << "sub";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 4: // sleep
-                            rr_command_stream << "sleep";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                        case 5: // for
-                            rr_command_stream << "for";
-                            pcb->commands.push_back(rr_command_stream.str());
-                            break;
-                    }
-                    cpuClocks++;
-                }
-                
-                fcfs_g_ready_queue.push_back(pcb);
-            }
+    // This loop generates processes as long as the flag is true
+    while (process_maker_running) {
+        std::shared_ptr<Process> pcb;
+        {
+            std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
             
-            // Notify scheduler that a new process is available
-            fcfs_g_scheduler_cv.notify_one();
-        }
+            pcb = std::make_shared<Process>(cpuClocks++);
+            pcb->start_time = std::chrono::system_clock::now();
+            std::stringstream tempString;
+            tempString << "process" << pcb->id;
+            pcb->processName = tempString.str();
 
-        // Add some delay between process creation if needed
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // Give it a default memory size
+            size_t mem_size = 128;
+            memory_manager.allocate_for_process(*pcb, mem_size);
 
-        // Check if we should stop
-        if (fcfs_g_ready_queue.empty() && fcfs_g_running_processes.empty()) {
-            fcfs_g_is_running = false;
-            fcfs_g_scheduler_cv.notify_all();
+            // Add simple commands
+            pcb->commands.push_back("write 0x10 55");
+            pcb->commands.push_back("read 0x10");
+            
+            fcfs_g_ready_queue.push_back(pcb);
         }
+        fcfs_g_scheduler_cv.notify_one();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Your original delay
     }
+    
+    // --- CORRECTED SHUTDOWN LOGIC ---
+    // After process maker stops, wait for all processes to finish execution.
+    while(true){
+        bool all_done;
+        {
+            std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+            // Check if any process is still in the ready or blocked queues
+            bool queues_are_empty = fcfs_g_ready_queue.empty() && fcfs_g_blocked_queue.empty();
+            
+            // Check if any process is still running on a core
+            bool running_is_empty = std::all_of(fcfs_g_running_processes.begin(), fcfs_g_running_processes.end(), 
+                                                [](const auto& p){ return p == nullptr; });
+            
+            all_done = queues_are_empty && running_is_empty;
+        }
+        if(all_done) {
+            // All work is complete, break the loop to signal shutdown.
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    // Signal all FCFS threads to terminate.
+    fcfs_g_is_running = false;
+    fcfs_g_scheduler_cv.notify_all();
 }
 
-// Function that starts and runs the processes
+// --- MODIFIED: Main FCFS function to correctly launch and join threads ---
 int FCFS() {
-    // Create scheduler and worker threads
+    // Reset the running flag to true each time the scheduler starts.
+    fcfs_g_is_running = true;
+
+    // The process generator handles its own lifecycle and shutdown signal.
+    // It runs in a detached thread so the CLI remains responsive.
+    std::thread process_generator(fcfs_create_processes);
+    process_generator.detach();
+
+    // Create the scheduler and worker threads.
     std::thread scheduler(fcfs_scheduler_thread_func);
     std::vector<std::thread> core_workers;
     for (int i = 0; i < CPU_COUNT; ++i) {
@@ -402,10 +384,8 @@ int FCFS() {
     }
     fcfs_g_scheduler_cv.notify_all();
 
-    // Start process creation
-    fcfs_create_processes();
-
-    // Shutdown
+    // --- IMPORTANT: Wait for threads to finish ---
+    // The .join() calls will block here until fcfs_g_is_running becomes false.
     scheduler.join();
     for (auto& worker : core_workers) {
         worker.join();

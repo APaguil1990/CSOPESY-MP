@@ -13,6 +13,16 @@
 #include <thread>
 #include <sstream>
 #include <atomic>
+#include "Process.h"
+#include "MemoryManager.h"
+#include <memory>
+#include <deque>
+#include <mutex>
+#include <condition_variable>
+
+
+#include "Process.h"
+#include "MemoryManager.h"
 
 using namespace std;
 
@@ -40,7 +50,27 @@ unsigned short variable_b = 0;
 unsigned short variable_c = 0;
 
 int cpuClocks = 1;
+// --- NEW: Global definitions for scheduler process lists and the MemoryManager. ---
+// These are defined here in CLI.cpp and will be declared as 'extern' in scheduler files.
 
+// For RR Scheduler
+std::deque<std::shared_ptr<Process>> rr_g_ready_queue;
+std::vector<std::shared_ptr<Process>> rr_g_running_processes(128, nullptr);
+std::vector<std::shared_ptr<Process>> rr_g_finished_processes;
+std::deque<std::shared_ptr<Process>> rr_g_blocked_queue; // For processes waiting on page faults
+std::mutex rr_g_process_mutex;
+std::condition_variable rr_g_scheduler_cv;
+std::atomic<bool> rr_g_is_running(true);
+
+// For FCFS Scheduler (you can add to this later if you implement it fully)
+std::deque<std::shared_ptr<Process>> fcfs_g_ready_queue;
+std::vector<std::shared_ptr<Process>> fcfs_g_running_processes(128, nullptr);
+std::vector<std::shared_ptr<Process>> fcfs_g_finished_processes;
+std::mutex fcfs_g_process_mutex;
+// ... add other FCFS globals as needed
+
+// The single, global MemoryManager instance. It's constructed once.
+MemoryManager memory_manager(rr_g_ready_queue, rr_g_running_processes, fcfs_g_ready_queue, fcfs_g_running_processes);
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 
 const int LIGHT_YELLOW = 14;    // Light yellow text 
@@ -263,9 +293,11 @@ void fcfs_writeTest(){
 }
 
 // Modifed: Added memory_size parameter
-void rr_nameProcess(std::string processName, size_t memory_size) {
-    void rr_create_process(std::string processName, size_t memory_size);
-    rr_create_process(processName, memory_size);
+void rr_nameProcess(std::string processName, size_t memory_size, MemoryManager& mm) {
+    // This is a forward declaration of the function that actually lives in RR.cpp
+    void rr_create_process(std::string processName, size_t memory_size, MemoryManager& mm);
+    // Call the actual creation function, passing the memory manager along.
+    rr_create_process(processName, memory_size, mm);
 }
 
 /**
@@ -315,9 +347,6 @@ bool readConfig(){
         }
     }
     configFile.close();
-
-    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_PROC;
-
     initFlag = true;
     return true;
 }
@@ -401,9 +430,11 @@ string processCommand(const string& cmd) {
                         return "Invalid memory allocation: must be power of 2 between 64-65536 bytes.";
                     } 
                     manager->createScreen(tokens[2]); 
-                    // Moddified: Pass memory size to process creation 
-                    rr_nameProcess(tokens[2], mem_size); 
-                    return "Created process: " + tokens[2] + " with " + tokens[3] + " bytes";
+                    // --- MODIFIED: Pass the global memory_manager instance to process creation ---
+                    // This requires that the rr_nameProcess function signature is also updated.
+                    // We will do that in the RR.cpp file later.
+                    rr_nameProcess(tokens[2], mem_size, memory_manager); 
+                    return "Created process: " + tokens[2] + " with " + to_string(mem_size) + " bytes";
                 } catch(...) {
                     return "Invalid memory size format.";
                 }
