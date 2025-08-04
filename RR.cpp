@@ -121,34 +121,34 @@ void rr_declareCommand() {
     }
 }
 
-void display_memory() {
-    int i = 4;
+// void display_memory() {
+//     int i = 4;
     
-    compute_used_memory(rr_g_memory_processes.size());
-    std::ostringstream filename;
-    filename << "memory_stamp_" << memoryCycle << ".txt";
+//     compute_used_memory(rr_g_memory_processes.size());
+//     std::ostringstream filename;
+//     filename << "memory_stamp_" << memoryCycle << ".txt";
 
-    std::ofstream memory_file (filename.str());
+//     std::ofstream memory_file (filename.str());
 
-    memory_file << "Timestamp: (" << rr_format_time(std::chrono::system_clock::now(), "%m/%d/%Y %I:%M:%S%p") << ")" << std::endl;
-    memory_file << "Number of processes in memory: " << rr_g_memory_processes.size() << std::endl;
-    memory_file << "Total external fragmentation in KB: " << (i-rr_g_memory_processes.size())*MEM_PER_PROC << std::endl << std::endl;
+//     memory_file << "Timestamp: (" << rr_format_time(std::chrono::system_clock::now(), "%m/%d/%Y %I:%M:%S%p") << ")" << std::endl;
+//     memory_file << "Number of processes in memory: " << rr_g_memory_processes.size() << std::endl;
+//     memory_file << "Total external fragmentation in KB: " << (i-rr_g_memory_processes.size())*MEM_PER_PROC << std::endl << std::endl;
 
-    memory_file << "----end---- = " << MAX_OVERALL_MEM << std::endl << std::endl;
+//     memory_file << "----end---- = " << MAX_OVERALL_MEM << std::endl << std::endl;
 
-    for (const auto& p : rr_g_memory_processes) {
-        if (p) {
-            memory_file << MEM_PER_PROC*i << std::endl;
-            memory_file << p->processName << std::endl;
-            i--;
-            memory_file << MEM_PER_PROC*i << std::endl << std::endl;
-        }
-    }
+//     for (const auto& p : rr_g_memory_processes) {
+//         if (p) {
+//             memory_file << MEM_PER_PROC*i << std::endl;
+//             memory_file << p->processName << std::endl;
+//             i--;
+//             memory_file << MEM_PER_PROC*i << std::endl << std::endl;
+//         }
+//     }
 
-    memory_file << "----start---- = 0" << std::endl;
+//     memory_file << "----start---- = 0" << std::endl;
 
-    memory_file.close();
-}
+//     memory_file.close();
+// }
 
 void rr_addCommand() {
     variable_a = variable_b + variable_c;
@@ -166,6 +166,14 @@ void rr_forCommand() {
     for (int i; i < 5; i++) {
         rr_addCommand();
     }
+}
+
+void rr_readCommand() {
+
+}
+
+void rr_writeCommand() {
+
 }
 
 // --- Scheduler Thread Function ---
@@ -280,7 +288,7 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 rr_g_scheduler_cv.notify_one();
 
                 // printing goes here
-                display_memory();
+                // display_memory();
                 memoryCycle++;
             } 
             else if (my_process->program_counter >= my_process->commands.size()) { // edit here for memory allocator
@@ -352,11 +360,10 @@ void rr_display_processes() {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
 
-    if (rr_g_running_processes[0] == nullptr) {
-        std::cout << "CPU Utilization: 0%" << std::endl;
-    } else {
-        std::cout << "CPU Utilization: 100%" << std::endl;
-    }
+    int busyCores = 0;
+    for (const auto& p : rr_g_running_processes) if (p) ++busyCores;
+    int cpuUtil   = CPU_COUNT ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
+    std::cout << "CPU Utilization: "  << cpuUtil << "%" << std::endl;
 
     // std::cout << "\nMemory processes:\n";
     // for (const auto& p : rr_g_memory_processes) {

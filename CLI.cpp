@@ -12,7 +12,6 @@
 #include <algorithm> 
 #include <thread>
 #include <sstream>
-#include <atomic>
 
 using namespace std;
 
