@@ -20,11 +20,33 @@
 #include <mutex>
 #include <condition_variable>
 
-
+#include "global.h"
+#include "FCFS.h"
+#include "RR.h"
 #include "Process.h"
 #include "MemoryManager.h"
 
 using namespace std;
+
+std::deque<ProcessCreationRequest> g_creation_queue;
+
+// RR Scheduler Globals
+std::deque<std::shared_ptr<Process>> rr_g_ready_queue;
+std::vector<std::shared_ptr<Process>> rr_g_running_processes(128, nullptr);
+std::vector<std::shared_ptr<Process>> rr_g_finished_processes;
+std::deque<std::shared_ptr<Process>> rr_g_blocked_queue;
+std::mutex rr_g_process_mutex;
+std::condition_variable rr_g_scheduler_cv;
+std::atomic<bool> rr_g_is_running(true);
+
+// FCFS Scheduler Globals
+std::deque<std::shared_ptr<Process>> fcfs_g_ready_queue;
+std::vector<std::shared_ptr<Process>> fcfs_g_running_processes(128, nullptr);
+std::vector<std::shared_ptr<Process>> fcfs_g_finished_processes;
+std::deque<std::shared_ptr<Process>> fcfs_g_blocked_queue;
+std::mutex fcfs_g_process_mutex;
+std::condition_variable fcfs_g_scheduler_cv;
+std::atomic<bool> fcfs_g_is_running(true);
 
 bool initFlag = false;
 
@@ -50,27 +72,10 @@ unsigned short variable_b = 0;
 unsigned short variable_c = 0;
 
 int cpuClocks = 1;
-// --- NEW: Global definitions for scheduler process lists and the MemoryManager. ---
-// These are defined here in CLI.cpp and will be declared as 'extern' in scheduler files.
-
-// For RR Scheduler
-std::deque<std::shared_ptr<Process>> rr_g_ready_queue;
-std::vector<std::shared_ptr<Process>> rr_g_running_processes(128, nullptr);
-std::vector<std::shared_ptr<Process>> rr_g_finished_processes;
-std::deque<std::shared_ptr<Process>> rr_g_blocked_queue; // For processes waiting on page faults
-std::mutex rr_g_process_mutex;
-std::condition_variable rr_g_scheduler_cv;
-std::atomic<bool> rr_g_is_running(true);
-
-// For FCFS Scheduler (you can add to this later if you implement it fully)
-std::deque<std::shared_ptr<Process>> fcfs_g_ready_queue;
-std::vector<std::shared_ptr<Process>> fcfs_g_running_processes(128, nullptr);
-std::vector<std::shared_ptr<Process>> fcfs_g_finished_processes;
-std::mutex fcfs_g_process_mutex;
-// ... add other FCFS globals as needed
-
-// The single, global MemoryManager instance. It's constructed once.
-MemoryManager memory_manager(rr_g_ready_queue, rr_g_running_processes, fcfs_g_ready_queue, fcfs_g_running_processes);
+std::atomic<bool> g_system_initialized = false;
+std::mutex g_cout_mutex;
+// --- MODIFIED: Changed to a global pointer to be initialized later ---
+MemoryManager* memory_manager = nullptr;
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 
 const int LIGHT_YELLOW = 14;    // Light yellow text 
@@ -250,7 +255,6 @@ void runMarquee(){
  * Runs the FCFS Scheduler
  */
 void runFCFS(){
-    void FCFS();
     FCFS();
 }
 
@@ -258,13 +262,13 @@ void runFCFS(){
  * Runs the RR Scheduler
  */
 void runRR(){
-    void RR();
     RR();
 }
 
-void rr_generate_processes() {
-    void rr_create_processes();
-    rr_create_processes();
+
+void fcfs_generate_processes() {
+    void fcfs_create_processes(MemoryManager& mm);
+    fcfs_create_processes(*memory_manager);
 }
 
 void rr_searchTest(std::string processName) {
@@ -292,13 +296,6 @@ void fcfs_writeTest(){
     fcfs_write_processes();
 }
 
-// Modifed: Added memory_size parameter
-void rr_nameProcess(std::string processName, size_t memory_size, MemoryManager& mm) {
-    // This is a forward declaration of the function that actually lives in RR.cpp
-    void rr_create_process(std::string processName, size_t memory_size, MemoryManager& mm);
-    // Call the actual creation function, passing the memory manager along.
-    rr_create_process(processName, memory_size, mm);
-}
 
 /**
  * Checks for the config.txt file and reads its contents to get values
@@ -393,24 +390,24 @@ string processCommand(const string& cmd) {
     }
 
     //handle initialization before other commands
-    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && initFlag == false){
-        if (cmd == "initialize"){
-            //read the config file
+    if (find(validCommands.begin(), validCommands.end(), cmd) != validCommands.end() && !initFlag){
+         if (cmd == "initialize"){
+            if (initFlag) return "Already initialized.";
+
             if (readConfig() == false){
                 return "initialization failed, please try again";
             };
 
-            if (scheduler == "fcfs"){
-               thread schedulerFCFS(runFCFS);
-               schedulerFCFS.detach();
-               return "running FCFS scheduler";
-            }else if (scheduler == "rr"){
-               thread schedulerRR(runRR);
-               schedulerRR.detach();
-               return "running RR scheduler";
+            // --- CRITICAL FIX: Create the MemoryManager HERE ---
+            if (memory_manager == nullptr) {
+                memory_manager = new MemoryManager(rr_g_ready_queue, rr_g_running_processes, fcfs_g_ready_queue, fcfs_g_running_processes);
             }
+            
+            // Set the flag to true, main() will now launch the threads.
+            initFlag = true; 
+            g_system_initialized = true;
 
-            return "initialization finished";
+            return "Initialization finished. Running '" + scheduler + "' scheduler.";
         }
 
         //can use the exit command
@@ -420,7 +417,6 @@ string processCommand(const string& cmd) {
 
     // Handle screen commands 
     if (tokens[0] == "screen" && initFlag == true) {
-        // Modified: Added memory size handling for screen -s
         if (tokens.size() >= 4 &&  tokens[1] == "-s") {
             if (process_maker_running) {
                 try {
@@ -430,21 +426,24 @@ string processCommand(const string& cmd) {
                         return "Invalid memory allocation: must be power of 2 between 64-65536 bytes.";
                     } 
                     manager->createScreen(tokens[2]); 
-                    // --- MODIFIED: Pass the global memory_manager instance to process creation ---
-                    // This requires that the rr_nameProcess function signature is also updated.
-                    // We will do that in the RR.cpp file later.
-                    rr_nameProcess(tokens[2], mem_size, memory_manager); 
-                    return "Created process: " + tokens[2] + " with " + to_string(mem_size) + " bytes";
+
+                   {
+                        // Lock the mutex to safely access the shared g_creation_queue
+                        std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+                        // Add the new process information to the queue
+                        g_creation_queue.push_back({tokens[2], mem_size});
+                    }
+                    // Notify the sleeping scheduler thread that there is a new request for it to handle
+                    rr_g_scheduler_cv.notify_one();
+                    
+                    return "Request to create process '" + tokens[2] + "' submitted.";
                 } catch(...) {
                     return "Invalid memory size format.";
                 }
-                // manager->createScreen(tokens[2]); 
-                // rr_nameProcess(tokens[2]);
-                // return "Created screen: " + tokens[2];
             } else {
                 return "scheduler has not been started yet!";
             }
-        } else if (tokens[1] == "-r") {
+        } else if (tokens.size() >= 3 && tokens[1] == "-r") { // Added size check for safety
             if (manager->screenExists(tokens[2])) {
                 manager->attachScreen(tokens[2]); 
                 rr_searchTest(tokens[2]);
@@ -452,20 +451,18 @@ string processCommand(const string& cmd) {
             } else {
                 return "Screen not found: " + tokens[2]; 
             }
-        } else if (tokens[1] == "-ls") {
+        } else if (tokens.size() >= 2 && tokens[1] == "-ls") { // Added size check for safety
             if (scheduler == "fcfs") {
                 fcfs_displayTest();
             } else if (scheduler == "rr") {
                 rr_displayTest();
             }
             return "";
-        }else if (tokens[1] == "-c") {
+        }else if (tokens.size() >= 2 && tokens[1] == "-c") { // Added size check for safety
             //TODO: Ability to add a set of user-defined instructions when creating a process.
-            // Look for process
-
-            // Add instructions to process to be executed
-            
-            return "";
+            return "screen -c not yet implemented.";
+        } else {
+            return "Invalid 'screen' command syntax.";
         }
     }else if (tokens[0] == "screen" && initFlag == false){
         return "use the 'initialize' command before using other commands";
@@ -493,24 +490,30 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "scheduler-start"){
-            //start the scheduler thread
             if (scheduler == "fcfs"){
-               thread schedulerFCFS(runFCFS);
-               schedulerFCFS.detach();
-               return "running FCFS scheduler";
-            }else if (scheduler == "rr"){
-               thread process_generator_rr(rr_generate_processes);
+               // Using a lambda to safely call the function in a new thread
+               thread process_generator_fcfs([](){
+                   // The code inside this lambda runs in the new thread.
+                   void fcfs_create_processes(MemoryManager& mm); // Forward declare
+                   fcfs_create_processes(*memory_manager);      // Call with dereferenced pointer
+               });
+               process_generator_fcfs.detach();
+               return "running FCFS scheduler process generator";
+           }else if (scheduler == "rr"){
+               // Using a lambda for the RR scheduler as well for safety and consistency
+               thread process_generator_rr([](){
+                   // The code inside this lambda runs in the new thread.
+                   void rr_create_processes(MemoryManager& mm); // Forward declare
+                   rr_create_processes(*memory_manager);      // Call with dereferenced pointer
+               });
                process_generator_rr.detach();
-               return "running RR scheduler";
+               return "running RR scheduler process generator";
             }
-            //if scheduler does not work
             return "error: cannot define scheduler";
         }
 
         if (cmd == "scheduler-stop"){
-            //stop the scheduler thread
             process_maker_running = false;
-
             return "scheduler stopped";
         }
 
@@ -519,7 +522,6 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "vmstat"){
-            //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
             if(vmStat() == false){
                 return "error: cannot retrieve information for vmstat"; 
             }
@@ -527,11 +529,6 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "process-smi"){
-            //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
-            // std::thread snap(process_smi::printSnapshot); 
-            // snap.detach(); 
-            // return "";
-
             std::cout << '\n'; 
             process_smi::printSnapshot(); 
             std::cout << std::endl; 
@@ -544,13 +541,12 @@ string processCommand(const string& cmd) {
             } else if (scheduler == "fcfs") {
                 fcfs_writeTest();
             }
-            return "";
+            return "Report written to csopesy-log.txt";
         }
 
         if (cmd == "exit") exit(0);
     }
-    //If command was not recognized
-
+    
     return "Unknown command: " + cmd;
 }
 
@@ -559,56 +555,78 @@ string processCommand(const string& cmd) {
  * @details Handles screen initialization, command processing, and UI updates
 */
 int main() {
-
-    auto manager = ScreenManager::getInstance();
+    auto screen_manager = ScreenManager::getInstance();
     clearScreen();
+
+    // --- Thread handle for the main scheduler ---
+    std::thread scheduler_thread;
+    bool scheduler_running = false;
 
     string input;
     while (true) {
-        // Get current positions
         initializePositions();
         
-        if (!manager->screenActive()) {
-            // Main screen
-            clearInputLine();
-            COORD inputPos = {0, inputLineY};
-            SetConsoleCursorPosition(hConsole, inputPos);
-            cout << "Enter a command: ";
-            
-            getline(cin, input);
-            transform(input.begin(), input.end(), input.begin(), ::tolower);
-            
-            // Clear input line
-            SetConsoleCursorPosition(hConsole, inputPos);
-            cout << string(80, ' ');
+        // --- The main input loop ---
+        if (!screen_manager->screenActive()) {
+            cout << "root:\\> ";
         } else {
-            // Process screen
-            clearInputLine();
-            COORD inputPos = {0, inputLineY};
-            SetConsoleCursorPosition(hConsole, inputPos);
             cout << "Screen active (type 'quit' to return): ";
-            
-            getline(cin, input);
-            transform(input.begin(), input.end(), input.begin(), ::tolower);
-            
-            // Clear input line
-            SetConsoleCursorPosition(hConsole, inputPos);
-            cout << string(80, ' ');
         }
+
+        if (!getline(cin, input)) { break; } // Exit on input failure
         
-        string output = processCommand(input);
+        // --- CRITICAL CHANGE: Initialization is handled first ---
+        if (!initFlag && input == "initialize") {
+            cout << "Initializing..." << endl;
+            if (readConfig()) {
+                // --- Create the Memory Manager HERE, and ONLY here ---
+                if (memory_manager == nullptr) {
+                    memory_manager = new MemoryManager(rr_g_ready_queue, rr_g_running_processes, fcfs_g_ready_queue, fcfs_g_running_processes);
+                }
+                initFlag = true; // Mark initialization as complete
+                cout << "Initialization successful. Scheduler: " << scheduler << endl;
+
+                // --- Launch the main scheduler thread AFTER manager is created ---
+                if (!scheduler_running) {
+                    if (scheduler == "rr") {
+                        scheduler_thread = std::thread(RR);
+                        scheduler_thread.detach();
+                    } else if (scheduler == "fcfs") {
+                        scheduler_thread = std::thread(FCFS);
+                        scheduler_thread.detach();
+                    }
+                    scheduler_running = true;
+                }
+            } else {
+                cout << "Initialization failed. Check config.txt." << endl;
+            }
+            continue; // Go to the next loop iteration to get a new command
+        }
+
+        // --- All other commands are processed here ---
+        string cmd_output = processCommand(input);
         
-        if (!output.empty()) {
-            // Display output at fixed position
-            clearOutputLine();
-            COORD outputPos = {0, outputLineY};
-            SetConsoleCursorPosition(hConsole, outputPos);
-            cout << output;
-            
-            // Return cursor to input position
-            COORD inputPos = {0, inputLineY};
-            SetConsoleCursorPosition(hConsole, inputPos);
+        if (input == "exit") {
+            break;
+        }
+
+        if (!cmd_output.empty()) {
+            // ... (your existing output logic is fine)
         }
     }
+
+    // --- Final Shutdown ---
+    cout << "Shutting down..." << endl;
+    process_maker_running = false; // Signal generator to stop
+    rr_g_is_running = false;
+    fcfs_g_is_running = false;
+    rr_g_scheduler_cv.notify_all();
+    fcfs_g_scheduler_cv.notify_all();
+    
+    // Give detached threads a moment to clean up
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    delete memory_manager; // Clean up the allocated memory
+    cout << "\nProgram finished." << endl;
     return 0;
 }

@@ -165,6 +165,7 @@ int MemoryManager::get_used_memory_bytes() {
 }
 
 void MemoryManager::allocate_for_process(Process& process, size_t requested_size) {
+     std::cout << "\nDEBUG: [MemoryManager] Allocating " << requested_size << " bytes for process '" << process.processName << "'." << std::endl;
     process.mem_data.memory_size_bytes = requested_size;
     process.mem_data.backing_store_offset = p_impl->next_backing_store_offset;
     process.mem_data.creation_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -174,9 +175,17 @@ void MemoryManager::allocate_for_process(Process& process, size_t requested_size
     int num_pages = (requested_size + MEM_PER_FRAME - 1) / MEM_PER_FRAME;
     process.mem_data.page_table.resize(num_pages);
     
+    // NOTE: For thread safety, the file operations should be locked.
+    // If you add a std::mutex p_impl->backing_store_mutex;, you would lock it here.
+    // std::lock_guard<std::mutex> lock(p_impl->backing_store_mutex);
+    
     std::vector<char> zero_buffer(requested_size, 0);
     p_impl->backing_store_stream.seekp(p_impl->next_backing_store_offset);
     p_impl->backing_store_stream.write(zero_buffer.data(), requested_size);
+
+    // Force the operating system to write the buffered data to the actual disk file.
+    p_impl->backing_store_stream.flush();
+    
     p_impl->next_backing_store_offset += requested_size;
 }
 

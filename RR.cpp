@@ -1,44 +1,23 @@
 #include <iostream>
 #include <ostream>
-#include <vector>
-#include <string>
-#include <map> 
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <chrono>
 #include <iomanip>
-#include <deque>
 #include <fstream>
-#include <memory>
-#include <atomic>
 #include <sstream>
 #include <random>
 #include <unordered_set>
+#include <map> 
+#include <algorithm> // For std::any_of
+#include <thread>    // For std::thread
 
-#include "Process.h"
-#include "MemoryManager.h"
-#include "ScreenManager.h"
-#include "config.h"
-#include "vmstat.h"
-
-std::mutex g_cout_mutex;
-
+// --- The ONLY project header you need ---
+#include "global.h" // Provides all global variables and class definitions
+#include "RR.h"      // Provides our function declarations
+#include "config.h"  // Provides config variables not in globals
+#include "vmstat.h"  // Provides vmstat functions
+// Your file-local variables are fine
+std::random_device rr_rd;
+std::mt19937 rr_gen(rr_rd());
 int memoryCycle = 0;
-
-
-
-std::random_device rr_rd;  // a seed source for the random number engine
-std::mt19937 rr_gen(rr_rd()); // mersenne_twister_engine seeded with rd()
-extern std::deque<std::shared_ptr<Process>> rr_g_ready_queue;
-extern std::vector<std::shared_ptr<Process>> rr_g_running_processes;
-extern std::vector<std::shared_ptr<Process>> rr_g_finished_processes;
-extern std::deque<std::shared_ptr<Process>> rr_g_blocked_queue; // New queue for page faults
-
-extern std::mutex rr_g_process_mutex;
-extern std::condition_variable rr_g_scheduler_cv;
-extern std::atomic<bool> rr_g_is_running;
-extern MemoryManager memory_manager;
 // --- Helper Function to Format Time ---
 std::string rr_format_time(const std::chrono::system_clock::time_point& tp, const std::string& fmt) {
     auto t = std::chrono::system_clock::to_time_t(tp);
@@ -83,7 +62,7 @@ void display_memory() {
     std::ofstream memory_file(filename.str());
 
     // --- Get a snapshot of the current state of all memory frames ---
-    auto frame_snapshot = memory_manager.get_frame_snapshot();
+    auto frame_snapshot = memory_manager->get_frame_snapshot();
     
     int occupied_frames = 0;
     for(const auto& frame : frame_snapshot) {
@@ -163,55 +142,69 @@ void rr_forCommand() {
 
 // --- Scheduler Thread Function ---
 // --- MODIFIED: Scheduler thread now unblocks processes and simplifies scheduling ---
+// --- FINAL, DEFINITIVE, AND SYNTAX-CORRECTED VERSION ---
 void rr_scheduler_thread_func() {
+     while (!g_system_initialized) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     while (rr_g_is_running) {
         std::unique_lock<std::mutex> lock(rr_g_process_mutex);
 
-        // --- NEW: Unblock processes that finished I/O ---
-        // This is the first thing the scheduler does in its cycle. It simulates
-        // the OS responding to I/O completion interrupts from the disk controller.
-        while (!rr_g_blocked_queue.empty()) {
-            std::shared_ptr<Process> unblocked_process = rr_g_blocked_queue.front();
-            rr_g_blocked_queue.pop_front();
-            unblocked_process->state = ProcessState::READY; // Change state back to READY
-            rr_g_ready_queue.push_back(unblocked_process);
-        }
-
-        // --- ORIGINAL LOGIC (Unchanged) ---
-        // The condition to wake up is the same: a core is free and a process is ready.
+        // Wait until there is work to do: a new process to create, a process to unblock, or a process to schedule.
         rr_g_scheduler_cv.wait(lock, [&]() {
             if (!rr_g_is_running) return true;
-            bool core_is_free = false;
-            for (const auto& p : rr_g_running_processes) {
-                if (p == nullptr) {
-                    core_is_free = true;
-                    break;
-                }
-            }
-            return core_is_free && !rr_g_ready_queue.empty();
+            bool core_is_free = std::any_of(rr_g_running_processes.begin(), rr_g_running_processes.end(), [](const auto& p){ return p == nullptr; });
+            return !g_creation_queue.empty() || !rr_g_blocked_queue.empty() || (core_is_free && !rr_g_ready_queue.empty());
         });
 
         if (!rr_g_is_running) break;
 
-        // --- SIMPLIFIED SCHEDULING LOGIC ---
-        // The old `if (rr_g_memory_processes.size() < FRAME_COUNT ...)` check is removed.
-        // We now directly schedule any ready process.
+        // --- Priority 1: Handle process creation requests ---
+        while (!g_creation_queue.empty()) {
+            ProcessCreationRequest request = g_creation_queue.front();
+            g_creation_queue.pop_front();
+            
+            // Create and set up the process object
+            std::shared_ptr<Process> pcb = std::make_shared<Process>(cpuClocks++);
+            pcb->start_time = std::chrono::system_clock::now();
+            pcb->processName = request.name;
+            
+            // Perform the memory allocation while still holding the lock.
+            // This is simpler and safe enough for this project.
+            memory_manager->allocate_for_process(*pcb, request.memory_size);
+
+            // Add example commands
+            pcb->commands.push_back("write 0x0 42");
+            pcb->commands.push_back("read 0x0");
+            pcb->commands.push_back("write 0x100 101");
+            pcb->commands.push_back("read 0x100");
+            pcb->commands.push_back("read 0xFFFF"); // Segfault test
+
+            // Add the newly created process to the ready queue
+            rr_g_ready_queue.push_back(pcb); 
+        }
+
+        // --- Priority 2: Unblock processes ---
+        while (!rr_g_blocked_queue.empty()) {
+            std::shared_ptr<Process> unblocked_process = rr_g_blocked_queue.front();
+            rr_g_blocked_queue.pop_front();
+            unblocked_process->state = ProcessState::READY;
+            rr_g_ready_queue.push_back(unblocked_process);
+        }
+
+        // --- Priority 3: Assign ready processes to cores ---
         for (int i = 0; i < CPU_COUNT; ++i) {
             if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) {
-                // MODIFIED: Use the new unified 'Process' class, not RR_PCB.
                 std::shared_ptr<Process> process = rr_g_ready_queue.front();
                 rr_g_ready_queue.pop_front();
-                
                 process->state = ProcessState::RUNNING;
                 process->assigned_core = i;
-                process->commands_executed_this_quantum = 0; // Reset quantum count
+                process->commands_executed_this_quantum = 0;
                 rr_g_running_processes[i] = process;
             }
         }
     }
 }
-
-
 
 // --- CPU Worker Thread Function ---
 // --- MODIFIED: CPU worker now handles memory access, page faults, and segfaults ---
@@ -232,7 +225,7 @@ void rr_core_worker_func(int core_id) {
                 my_process->finish_time = std::chrono::system_clock::now();
                 rr_g_finished_processes.push_back(my_process);
                 rr_g_running_processes[core_id] = nullptr;
-                memory_manager.deallocate_for_process(*my_process); // Release memory frames
+                memory_manager->deallocate_for_process(*my_process); // Release memory frames
                 rr_g_scheduler_cv.notify_one();
                 continue; // Go to next worker loop iteration
             }
@@ -253,7 +246,7 @@ void rr_core_worker_func(int core_id) {
                 bool is_write_op = (command_token == "write");
                 
                 // This is the core call to the memory management unit.
-                char* physical_ptr = memory_manager.access_memory(*my_process, address, is_write_op);
+                char* physical_ptr = memory_manager->access_memory(*my_process, address, is_write_op);
 
                 // --- NEW: Handle the 3 possible outcomes ---
 
@@ -265,7 +258,7 @@ void rr_core_worker_func(int core_id) {
                     my_process->state = ProcessState::FINISHED;
                     rr_g_finished_processes.push_back(my_process);
                     rr_g_running_processes[core_id] = nullptr;
-                    memory_manager.deallocate_for_process(*my_process);
+                    memory_manager->deallocate_for_process(*my_process);
                     rr_g_scheduler_cv.notify_one(); // Notify scheduler of the open core.
                 
                 // Outcome 2: Page Fault (Valid address, but not in a frame)
@@ -313,7 +306,7 @@ void rr_core_worker_func(int core_id) {
                     my_process->finish_time = std::chrono::system_clock::now();
                     rr_g_finished_processes.push_back(my_process);
                     rr_g_running_processes[core_id] = nullptr;
-                    memory_manager.deallocate_for_process(*my_process);
+                    memory_manager->deallocate_for_process(*my_process);
                     rr_g_scheduler_cv.notify_one();
 
                 // Check if the process's time slice (quantum) has ended.
@@ -445,34 +438,45 @@ void rr_write_processes() {
 // --- MODIFIED: Updated to create a 'Process' and use the MemoryManager ---
 // Note the new function signature to accept a MemoryManager reference.
 void rr_create_process(std::string processName, std::size_t memory_size, MemoryManager& mm) {
+    // --- DEBUG: Function Entry ---
+    std::cout << "\nDEBUG: Entered rr_create_process for '" << processName << "' with size " << memory_size << "." << std::endl;
+
     std::shared_ptr<Process> pcb;
     {
+        // --- DEBUG: Mutex Lock ---
+        std::cout << "DEBUG: rr_create_process - Attempting to lock mutex..." << std::endl;
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+        std::cout << "DEBUG: rr_create_process - Mutex locked successfully." << std::endl;
         
-        // MODIFIED: Use the unified 'Process' class.
+        // --- DEBUG: Process Creation ---
+        std::cout << "DEBUG: rr_create_process - Calling std::make_shared<Process>..." << std::endl;
         pcb = std::make_shared<Process>(cpuClocks++);
+        std::cout << "DEBUG: rr_create_process - std::make_shared<Process> succeeded. PID: " << pcb->id << std::endl;
+        
         pcb->start_time = std::chrono::system_clock::now();
         pcb->processName = processName;
+        std::cout << "DEBUG: rr_create_process - Process members assigned." << std::endl;
 
-        // --- NEW: Allocate space via MemoryManager ---
-        // This sets up the process's page table and reserves space in the backing store file.
+        // --- DEBUG: Memory Allocation ---
+        std::cout << "DEBUG: rr_create_process - Calling allocate_for_process..." << std::endl;
         mm.allocate_for_process(*pcb, memory_size);
-
-        // --- NEW: Add example memory instructions to test the system ---
-        // This fulfills the spec requirement for user-defined READ/WRITE instructions.
-        pcb->commands.push_back("write 0x0 42");    // Write value 42 to address 0x0
-        pcb->commands.push_back("read 0x0");        // Read from address 0x0
-        pcb->commands.push_back("write 0x100 101"); // Write value 101 to address 0x100 (256)
-        pcb->commands.push_back("read 0x100");      // Read from address 0x100
+        std::cout << "DEBUG: rr_create_process - allocate_for_process returned." << std::endl;
         
-        // This instruction will cause a segmentation fault if memory_size is <= 0xFFFF
-        pcb->commands.push_back("read 0xFFFF");     // Attempt to read from an out-of-bounds address.
+        // Your original command list
+        pcb->commands.push_back("write 0x0 42");
+        pcb->commands.push_back("read 0x0");
+        pcb->commands.push_back("write 0x100 101");
+        pcb->commands.push_back("read 0x100");
+        pcb->commands.push_back("read 0xFFFF");
+        std::cout << "DEBUG: rr_create_process - Commands added." << std::endl;
 
         rr_g_ready_queue.push_back(pcb);
+        std::cout << "DEBUG: rr_create_process - Process pushed to ready queue." << std::endl;
     }
     
     // Notify the scheduler that a new process is ready.
     rr_g_scheduler_cv.notify_one();
+    std::cout << "DEBUG: rr_create_process - Notified scheduler and exiting function." << std::endl;
 }
 
 // Function that creates processes
@@ -496,7 +500,7 @@ void rr_create_processes(MemoryManager& mm) {
             // Give it a default memory size.
             size_t mem_size = 256;
             // Allocate its memory space in the backing store.
-            mm.allocate_for_process(*pcb, mem_size);
+            memory_manager->allocate_for_process(*pcb, mem_size);
 
             // Add some simple commands.
             pcb->commands.push_back("write 0x10 123");
@@ -541,19 +545,16 @@ void rr_create_processes(MemoryManager& mm) {
 
 // Function that starts and runs the processes
 int RR() {
-    // Create scheduler and worker threads
-      rr_g_is_running = true; 
+    rr_g_is_running = true;
+    
+    // The process generator is started by 'scheduler-start'
+    
     std::thread scheduler(rr_scheduler_thread_func);
     std::vector<std::thread> core_workers;
     for (int i = 0; i < CPU_COUNT; ++i) {
         core_workers.emplace_back(rr_core_worker_func, i);
     }
-    rr_g_scheduler_cv.notify_all();
-
-    // Start process creation
-    // rr_create_processes();
-
-    // Shutdown
+    
     scheduler.join();
     for (auto& worker : core_workers) {
         worker.join();

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <atomic>
 
+class MemoryManager;
 // --- Unified Process State ---
 enum class ProcessState {
     READY,
