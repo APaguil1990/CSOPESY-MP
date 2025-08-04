@@ -14,6 +14,7 @@
 #include <random>
 
 #include "Process.h"
+#include "vmstat.h"
 #include "MemoryManager.h"
 #include "ScreenManager.h"
 #include "config.h"
@@ -164,6 +165,7 @@ void fcfs_core_worker_func(int core_id) {
                         fcfs_g_finished_processes.push_back(my_process);
                         fcfs_g_running_processes[core_id] = nullptr;
                         memory_manager.deallocate_for_process(*my_process);
+                        vmstats_increment_paged_out();
                         fcfs_g_scheduler_cv.notify_one();
                         goto next_process_loop; // Break out to get a new process.
                     } 
@@ -191,6 +193,7 @@ void fcfs_core_worker_func(int core_id) {
 
                 my_process->program_counter++; // Advance to the next instruction on success.
                 std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Your original delay
+                vmstats_increment_active_ticks(); 
             }
 
             // If the while loop finishes naturally, the process has completed all its commands.
@@ -205,6 +208,7 @@ void fcfs_core_worker_func(int core_id) {
             }
         } else {
             // No process assigned to this core.
+            vmstats_increment_idle_ticks();
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     next_process_loop:; // The goto label. The loop continues to get the next process.
@@ -296,6 +300,7 @@ void fcfs_create_process(std::string processName, size_t memory_size, MemoryMana
 
         // Allocate its memory space in the backing store
         mm.allocate_for_process(*pcb, memory_size);
+        vmstats_increment_paged_in();
 
         // Add some example memory commands
         pcb->commands.push_back("write 0x20 99");
@@ -328,7 +333,7 @@ void fcfs_create_processes() {
             // Give it a default memory size
             size_t mem_size = 128;
             memory_manager.allocate_for_process(*pcb, mem_size);
-
+            vmstats_increment_paged_in();
             // Add simple commands
             pcb->commands.push_back("write 0x10 55");
             pcb->commands.push_back("read 0x10");
