@@ -502,6 +502,24 @@ void rr_create_process(std::string processName, std::size_t memory_size) {
     rr_g_scheduler_cv.notify_one();
 }
 
+void rr_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands) {
+    // Create a new process
+    std::shared_ptr<RR_PCB> pcb;
+    
+    pcb = std::make_shared<RR_PCB>(cpuClocks);
+    pcb->start_time = std::chrono::system_clock::now(); 
+    pcb->processName = processName;
+    pcb->memory_size = memory_size;
+
+    pcb->commands = commands;
+
+    cpuClocks++;
+    rr_g_ready_queue.push_back(pcb);
+
+    // Notify scheduler that a new process is available
+    rr_g_scheduler_cv.notify_one();
+}
+
 // Function that creates processes
 void rr_create_processes() {
     process_maker_running = true;
