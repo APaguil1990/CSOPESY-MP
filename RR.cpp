@@ -446,7 +446,25 @@ void rr_core_worker_func(int core_id) { // executes cmds
 
                     std::vector<std::string> tokens = rr_tokenizePrintStatement(command);
 
-                    tempString << tokens[0] << std::endl << tokens[1] << std::endl << std::endl;
+
+                    for (auto& token : tokens) {
+                        bool found = false;
+                        for (auto& [name, value] : my_process->variables) {
+                            if (token == name) {
+                                tempString << value;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (found == false) {
+                            tempString << token;
+                        }
+                    }
+
+                    // tempString << tokens[0];
+                    // tempString << std::endl;
+                    // tempString << tokens[1];
+                    // tempString << std::endl;
                     my_process->log_file.push_back(tempString.str());
 
                     // log file in file
