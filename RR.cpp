@@ -341,6 +341,57 @@ std::vector<std::string> rr_tokenize(const std::string& str) {
     return tokens;
 }
 
+std::vector<std::string> rr_tokenizePrintStatement(const std::string& input) {
+    std::vector<std::string> tokens;
+    
+    // Find the positions of key elements
+    size_t openParen = input.find('(');
+    size_t closeParen = input.rfind(')');
+    
+    // Check if the format is correct
+    if (openParen == std::string::npos || closeParen == std::string::npos || 
+        openParen >= closeParen) {
+        return tokens; // return empty vector if format is invalid
+    }
+    
+    // Extract the content inside parentheses
+    std::string content = input.substr(openParen + 1, closeParen - openParen - 1);
+    
+    // Find the positions of the quote marks
+    size_t firstQuote = content.find('"');
+    size_t secondQuote = content.rfind('"');
+    
+    // Check if there are quoted strings
+    if (firstQuote != std::string::npos && secondQuote != std::string::npos && 
+        firstQuote < secondQuote) {
+        // Extract the quoted text
+        std::string quotedText = content.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+        tokens.push_back(quotedText);
+        
+        // Extract the remaining part after the quoted text
+        std::string remaining = content.substr(secondQuote + 1);
+        
+        // Remove any + signs and whitespace
+        remaining.erase(std::remove(remaining.begin(), remaining.end(), '+'), remaining.end());
+        remaining.erase(std::remove(remaining.begin(), remaining.end(), ' '), remaining.end());
+        
+        if (!remaining.empty()) {
+            tokens.push_back(remaining);
+        }
+    } else {
+        // If no quotes, just process the entire content
+        std::string cleaned = content;
+        cleaned.erase(std::remove(cleaned.begin(), cleaned.end(), '+'), cleaned.end());
+        cleaned.erase(std::remove(cleaned.begin(), cleaned.end(), ' '), cleaned.end());
+        
+        if (!cleaned.empty()) {
+            tokens.push_back(cleaned);
+        }
+    }
+    
+    return tokens;
+}
+
 // --- CPU Worker Thread Function ---
 void rr_core_worker_func(int core_id) { // executes cmds
     while (rr_g_is_running) {
@@ -390,7 +441,12 @@ void rr_core_worker_func(int core_id) { // executes cmds
                     // my_process->log_file.push_back(tempString.str());
 
                     std::ostringstream tempString;
-                    tempString << std::get<0>(my_process->variables[0]) << std::get<1>(my_process->variables[0]) << std::endl << std::get<0>(my_process->variables[1]) << std::get<1>(my_process->variables[1]) << std::endl << std::get<0>(my_process->variables[2]) << std::get<1>(my_process->variables[2]) << std::endl;
+                    // tempString << std::get<0>(my_process->variables[0]) << std::get<1>(my_process->variables[0]) << std::endl << std::get<0>(my_process->variables[1]) << std::get<1>(my_process->variables[1]) << std::endl << std::get<0>(my_process->variables[2]) << std::get<1>(my_process->variables[2]) << std::endl;
+                    // my_process->log_file.push_back(tempString.str());
+
+                    std::vector<std::string> tokens = rr_tokenizePrintStatement(command);
+
+                    tempString << tokens[0] << std::endl << tokens[1] << std::endl << std::endl;
                     my_process->log_file.push_back(tempString.str());
 
                     // log file in file
