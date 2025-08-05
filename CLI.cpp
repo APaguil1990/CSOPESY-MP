@@ -30,13 +30,16 @@ int delayPerExec = 100000; // delay between executing next instruction [0, 2^32]
 
 int MAX_OVERALL_MEM = 0;
 int MEM_PER_FRAME = 0;
-int MEM_PER_PROC = 0;
+int MIN_MEM_PER_PROC = 0;
+int MAX_MEM_PER_PROC = 0;
 
 int FRAME_COUNT = 0;
 
 unsigned short variable_a = 0;
 unsigned short variable_b = 0;
 unsigned short variable_c = 0;
+
+std::vector<std::tuple<std::string, uint16_t>> memory_variables;
 
 int cpuClocks = 1;
 
@@ -311,14 +314,16 @@ bool readConfig(){
                 MAX_OVERALL_MEM = std::stoi(value);
             } else if (key == "mem-per-frame") {
                 MEM_PER_FRAME = std::stoi(value);
-            } else if (key == "mem-per-proc") {
-                MEM_PER_PROC = std::stoi(value);
+            } else if (key == "min-mem-per-proc") {
+                MIN_MEM_PER_PROC = std::stoi(value);
+            } else if (key == "max-mem-per-proc") {
+                MAX_MEM_PER_PROC = std::stoi(value);
             }
         }
     }
     configFile.close();
 
-    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_PROC;
+    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_FRAME;
 
     initFlag = true;
     return true;

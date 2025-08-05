@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <vector>
@@ -104,21 +105,20 @@ std::vector<std::string> rr_getRunningProcessNames() {
     return out;
 }
 
-void rr_declareCommand() {
-    std::uniform_int_distribution<> declare_rand(0, 2);
-
-    int declared = declare_rand(rr_gen);
-
-    switch (declared) {
-        case 0:
-            variable_a = 1;
+void rr_declareCommand(std::shared_ptr<RR_PCB> process, std::string varA, uint16_t value) {
+    // Check if variable already exists
+    bool found = false;
+    for (auto& [name, val] : process->variables) {
+        if (name == varA) {
+            val = value;  // Update existing value
+            found = true;
             break;
-        case 1:
-            variable_b = 1;
-            break;
-        case 2:
-            variable_c = 1;
-            break;
+        }
+    }
+    
+    // If variable doesn't exist, add it
+    if (!found) {
+        process->variables.emplace_back(varA, value);
     }
 }
 
@@ -151,12 +151,72 @@ void rr_declareCommand() {
 //     memory_file.close();
 // }
 
-void rr_addCommand() {
-    variable_a = variable_b + variable_c;
+void rr_addCommand(std::shared_ptr<RR_PCB> process, std::string varA, std::string varB, std::string varC) {
+    uint16_t valB = 0;
+    uint16_t valC = 0;
+    
+    for (auto& [name, value] : process->variables) {
+        if (name == varB) {
+            valB = value;
+            break;
+        }
+    }
+    
+    for (auto& [name, value] : process->variables) {
+        if (name == varC) {
+            valC = value;
+            break;
+        }
+    }
+    
+    uint16_t sum = valB + valC;
+    
+    bool found = false;
+    for (auto& [name, value] : process->variables) {
+        if (name == varA) {
+            value = sum;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        process->variables.emplace_back(varA, sum);
+    }
 }
 
-void rr_subtractCommand() {
-    variable_a = variable_b - variable_c;
+void rr_subtractCommand(std::shared_ptr<RR_PCB> process, std::string varA, std::string varB, std::string varC) {
+    uint16_t valB = 0;
+    uint16_t valC = 0;
+    
+    for (auto& [name, value] : process->variables) {
+        if (name == varB) {
+            valB = value;
+            break;
+        }
+    }
+    
+    for (auto& [name, value] : process->variables) {
+        if (name == varC) {
+            valC = value;
+            break;
+        }
+    }
+    
+    uint16_t sum = valB - valC;
+    
+    bool found = false;
+    for (auto& [name, value] : process->variables) {
+        if (name == varA) {
+            value = sum;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        process->variables.emplace_back(varA, sum);
+    }
 }
 
 void rr_sleepCommand() {
@@ -164,17 +224,62 @@ void rr_sleepCommand() {
 }
 
 void rr_forCommand() {
-    for (int i; i < 5; i++) {
-        rr_addCommand();
+    // for (int i; i < 5; i++) {
+    //     rr_addCommand();
+    // }
+}
+
+void rr_readCommand(std::shared_ptr<RR_PCB> process, std::string varA, std::string memory) {
+    uint16_t mem_value = 0;
+    
+    // Find the value in memory_variables
+    for (auto& [name, value] : memory_variables) {
+        if (name == memory) {
+            mem_value = value;
+            break;
+        }
+    }
+
+    // Update the variable in process->variables
+    bool found = false;
+    for (auto& [name, value] : process->variables) {
+        if (name == varA) {
+            value = mem_value;  // Write the memory value to the variable
+            found = true;
+            break;
+        }
+    }
+    
+    // If varA doesn't exist in process->variables, add it
+    if (!found) {
+        process->variables.emplace_back(varA, mem_value);
     }
 }
 
-void rr_readCommand() {
+void rr_writeCommand(std::shared_ptr<RR_PCB> process, std::string memory, std::string varA) {
+    uint16_t mem_value = 0;
+    
+    // Find the value in memory_variables
+    for (auto& [name, value] : process->variables) {
+        if (name == varA) {
+            mem_value = value;
+            break;
+        }
+    }
 
-}
+    // Update the variable in process->variables
+    bool found = false;
+    for (auto& [name, value] : memory_variables) {
+        if (name == memory) {
+            value = mem_value;  // Write the memory value to the variable
+            found = true;
+            break;
+        }
+    }
 
-void rr_writeCommand() {
-
+    if (!found) {
+        process->variables.emplace_back(varA, mem_value);
+    }
 }
 
 // --- Scheduler Thread Function ---
@@ -256,13 +361,14 @@ void rr_core_worker_func(int core_id) { // executes cmds
                 std::vector<std::string> words = rr_tokenize(command);
 
                 if (words[0].compare("declare") == 0) {
-                    rr_declareCommand();
+                    uint16_t value = static_cast<uint16_t>(std::stoi(words[2]));
+                    rr_declareCommand(my_process, words[1], value);
                     
                 } else if (words[0].compare("add") == 0) {
-                    rr_addCommand();
+                    rr_addCommand(my_process, words[1], words[2], words[3]);
 
                 } else if (words[0].compare("sub") == 0) {
-                    rr_subtractCommand();
+                    rr_subtractCommand(my_process, words[1], words[2], words[3]);
 
                 } else if (words[0].compare("sleep") == 0) {
                     rr_sleepCommand();
@@ -271,16 +377,20 @@ void rr_core_worker_func(int core_id) { // executes cmds
                     rr_forCommand();
 
                 } else if (words[0].compare("read") == 0) {
-                    rr_forCommand();
+                    rr_readCommand(my_process, words[1], words[2]);
 
                 } else if (words[0].compare("write") == 0) {
-                    rr_forCommand();
+                    rr_writeCommand(my_process, words[1], words[2]);
 
                 } else {
                     // log file in memory
+                    // std::ostringstream tempString;
+                    // tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
+                    //            << " \"" << command << "\"" << std::endl;
+                    // my_process->log_file.push_back(tempString.str());
+
                     std::ostringstream tempString;
-                    tempString << "(" << rr_format_time(now, "%m/%d/%Y %I:%M:%S%p") << ") Core:" << core_id
-                               << " \"" << command << "\"" << std::endl;
+                    tempString << std::get<0>(my_process->variables[0]) << std::get<1>(my_process->variables[0]) << std::endl << std::get<0>(my_process->variables[1]) << std::get<1>(my_process->variables[1]) << std::endl << std::get<0>(my_process->variables[2]) << std::get<1>(my_process->variables[2]) << std::endl;
                     my_process->log_file.push_back(tempString.str());
 
                     // log file in file
@@ -539,14 +649,6 @@ void rr_create_process_with_commands(std::string processName, size_t memory_size
     pcb->memory_size = memory_size;
 
     pcb->commands = commands;
-
-    std::cout << "TEST" << std::endl;
-
-    for(const std::string& line : pcb-> commands) {
-        std::cout << line << std::endl;
-    }
-
-    std::cout << "TEST \n\n\n\n" << std::endl;
 
     cpuClocks++;
     rr_g_ready_queue.push_back(pcb);
