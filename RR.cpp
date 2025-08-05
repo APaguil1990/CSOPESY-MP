@@ -287,6 +287,24 @@ void rr_display_processes() {
     std::cout << "-------------------------------------------------------------\n\n";
 }
 
+void rr_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands) {
+    // Create a new process
+    std::shared_ptr<Process> pcb;
+    
+    pcb = std::make_shared<Process>(cpuClocks);
+    pcb->start_time = std::chrono::system_clock::now(); 
+    pcb->processName = processName;
+    pcb->memory_size = memory_size;
+
+    pcb->commands = commands;
+
+    cpuClocks++;
+    rr_g_ready_queue.push_back(pcb);
+
+    // Notify scheduler that a new process is available
+    rr_g_scheduler_cv.notify_one();
+}
+
 void rr_write_processes() {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
     std::ofstream outfile("csopesy-log.txt", std::ios::app);

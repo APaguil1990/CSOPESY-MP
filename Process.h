@@ -53,6 +53,8 @@ public:
     int program_counter = 0;
     int commands_executed_this_quantum = 0;
     std::vector<std::string> commands;
+    size_t memory_size = 0;
+    std::vector<std::tuple<std::string, uint16_t>> variables;
 
     // --- ADDED: For timing ---
     std::chrono::time_point<std::chrono::system_clock> start_time;
