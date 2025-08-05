@@ -1,5 +1,5 @@
-#ifndef GLOBALS_H
-#define GLOBALS_H
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
 #include <vector>
 #include <deque>
