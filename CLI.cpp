@@ -432,30 +432,26 @@ string processCommand(const string& cmd) {
     // Handle screen commands 
     if (tokens[0] == "screen" && initFlag == true) {
         if (tokens.size() >= 4 &&  tokens[1] == "-s") {
-            if (process_maker_running) {
-                try {
-                    size_t mem_size = stoull(tokens[3]); 
+            try {
+                size_t mem_size = stoull(tokens[3]); 
 
-                    if (!isValidMemorySize(mem_size)) {
-                        return "Invalid memory allocation: must be power of 2 between 64-65536 bytes.";
-                    } 
-                    manager->createScreen(tokens[2]); 
+                if (!isValidMemorySize(mem_size)) {
+                    return "Invalid memory allocation: must be power of 2 between 64-65536 bytes.";
+                } 
+                manager->createScreen(tokens[2]); 
 
-                   {
-                        // Lock the mutex to safely access the shared g_creation_queue
-                        std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-                        // Add the new process information to the queue
-                        g_creation_queue.push_back({tokens[2], mem_size});
-                    }
-                    // Notify the sleeping scheduler thread that there is a new request for it to handle
-                    rr_g_scheduler_cv.notify_one();
-                    
-                    return "Request to create process '" + tokens[2] + "' submitted.";
-                } catch(...) {
-                    return "Invalid memory size format.";
+                {
+                    // Lock the mutex to safely access the shared g_creation_queue
+                    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+                    // Add the new process information to the queue
+                    g_creation_queue.push_back({tokens[2], mem_size});
                 }
-            } else {
-                return "scheduler has not been started yet!";
+                // Notify the sleeping scheduler thread that there is a new request for it to handle
+                rr_g_scheduler_cv.notify_one();
+                
+                return "Request to create process '" + tokens[2] + "' submitted.";
+            } catch(...) {
+                return "Invalid memory size format.";
             }
         } else if (tokens.size() >= 3 && tokens[1] == "-r") { // Added size check for safety
             if (manager->screenExists(tokens[2])) {
