@@ -165,6 +165,24 @@ void fcfs_core_worker_func(int core_id) {
 void fcfs_display_processes() { /* Your existing display logic is fine */ }
 void fcfs_write_processes() { /* Your existing write logic is fine */ }
 
+void fcfs_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands) {
+    // Create a new process
+    std::shared_ptr<Process> pcb;
+    
+    pcb = std::make_shared<Process>(cpuClocks);
+    pcb->start_time = std::chrono::system_clock::now(); 
+    pcb->processName = processName;
+    pcb->memory_size = memory_size;
+
+    pcb->commands = commands;
+
+    cpuClocks++;
+    fcfs_g_ready_queue.push_back(pcb);
+
+    // Notify scheduler that a new process is available
+    fcfs_g_scheduler_cv.notify_one();
+}
+
 // --- The Process Generator for 'scheduler-start' ---
 // CORRECTION: This now adds requests to the shared queue.
 void fcfs_create_processes(MemoryManager& mm) {
