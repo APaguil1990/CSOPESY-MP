@@ -4,58 +4,79 @@
 #include <string>
 #include <vector>
 #include <chrono>
-#include <atomic>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <condition_variable>
 
-class MemoryManager;
-// --- Unified Process State ---
 enum class ProcessState {
+    NEW,
     READY,
     RUNNING,
-    BLOCKED, // New state for processes waiting on a page fault
+    BLOCKED,
     FINISHED
 };
 
-// --- Memory Management Data per Process ---
 struct PageTableEntry {
     bool is_present = false;
     bool is_dirty = false;
     int frame_index = -1;
 };
 
-struct ProcessMemoryData {
-    size_t memory_size_bytes = 0;
-    long backing_store_offset = -1;
+struct MemoryData {
+    size_t memory_size_bytes;
+    long long creation_timestamp;
+    long backing_store_offset;
     std::vector<PageTableEntry> page_table;
-    long long creation_timestamp = 0;
-    
-    // For 'screen -r' error reporting
     bool terminated_by_error = false;
     std::string termination_reason = "";
+    
+    std::mutex page_fault_mutex;
+    std::condition_variable page_fault_cv;
 };
 
-// --- The Unified Process Control Block (PCB) ---
-// This class replaces RR_PCB and FCFS_PCB.
 class Process {
 public:
-    // --- Core Fields (from both RR_PCB and FCFS_PCB) ---
-    int id = 0;
-    std::string processName = "";
-    std::atomic<ProcessState> state;
-    std::vector<std::string> commands;
-    size_t program_counter = 0;
-    std::chrono::system_clock::time_point start_time;
-    std::chrono::system_clock::time_point finish_time;
+    int id;
+    std::string processName;
+    ProcessState state;
+    
+    // --- ADDED: For scheduler logic and statistics ---
+    int arrival_time;
+    int cpu_burst_time;
+    int io_burst_time;
+    
+    int remaining_burst_time;
+    int io_remaining_time;
+    int instructions_per_run;
     int assigned_core = -1;
-    std::vector<std::string> log_file;
-
-    // --- RR-Specific Field ---
+    int program_counter = 0;
     int commands_executed_this_quantum = 0;
+    std::vector<std::string> commands;
 
-    // --- Memory Management Data ---
-    ProcessMemoryData mem_data;
+    // --- ADDED: For timing ---
+    std::chrono::time_point<std::chrono::system_clock> start_time;
+    std::chrono::time_point<std::chrono::system_clock> finish_time;
 
-    // --- Constructor ---
-    Process(int pid) : id(pid), state(ProcessState::READY) {}
+    MemoryData mem_data;
+    
+    // --- ADDED: A new constructor that takes a single integer ID ---
+    // This constructor matches the call std::make_shared<Process>(cpuClocks++)
+    Process(int id) 
+        : id(id), processName("P" + std::to_string(id)), state(ProcessState::NEW), 
+          arrival_time(0), cpu_burst_time(0), io_burst_time(0), 
+          remaining_burst_time(0), io_remaining_time(0), instructions_per_run(0) {}
+
+    // Default constructor
+    Process() : id(-1), processName(""), state(ProcessState::NEW), 
+                arrival_time(0), cpu_burst_time(0), remaining_burst_time(0),
+                io_burst_time(0), io_remaining_time(0), instructions_per_run(0) {}
+
+    // Existing constructor
+    Process(int id, const std::string& name, int arrival, int cpu_burst, int io_burst)
+        : id(id), processName(name), state(ProcessState::NEW), 
+          arrival_time(arrival), cpu_burst_time(cpu_burst), remaining_burst_time(cpu_burst),
+          io_burst_time(io_burst), io_remaining_time(io_burst), instructions_per_run(0) {}
 };
 
 #endif // PROCESS_H

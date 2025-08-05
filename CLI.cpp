@@ -63,8 +63,7 @@ int delayPerExec = 100000; // delay between executing next instruction [0, 2^32]
 
 int MAX_OVERALL_MEM = 0;
 int MEM_PER_FRAME = 0;
-int MIN_MEM_PER_PROC = 0;
-int MAX_MEM_PER_PROC = 0;
+int MEM_PER_PROC = 0;
 
 int FRAME_COUNT = 0;
 
@@ -72,14 +71,11 @@ unsigned short variable_a = 0;
 unsigned short variable_b = 0;
 unsigned short variable_c = 0;
 
-std::vector<std::tuple<std::string, uint16_t>> memory_variables;
-
 int cpuClocks = 1;
 std::atomic<bool> g_system_initialized = false;
 std::mutex g_cout_mutex;
 // --- MODIFIED: Changed to a global pointer to be initialized later ---
 MemoryManager* memory_manager = nullptr;
-
 // Color definitions 
 const int LIGHT_GREEN = 10;     // Light green text 
 const int LIGHT_YELLOW = 14;    // Light yellow text 
@@ -269,22 +265,15 @@ void runRR(){
     RR();
 }
 
-void rr_generate_processes() {
-    void rr_create_processes();
-    rr_create_processes();
-}
 
 void fcfs_generate_processes() {
     void fcfs_create_processes(MemoryManager& mm);
     fcfs_create_processes(*memory_manager);
 }
 
-void rr_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands);
-void fcfs_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands);
-
 void rr_searchTest(std::string processName) {
-    void rr_search_process(std::string processName);
-    rr_search_process(processName);
+    // void rr_search_process(std::string processName);
+    // rr_search_process(processName);
 }
 
 void rr_displayTest(){
@@ -307,11 +296,6 @@ void fcfs_writeTest(){
     fcfs_write_processes();
 }
 
-// Modifed: Added memory_size parameter
-void rr_nameProcess(std::string processName, size_t memory_size) {
-    void rr_create_process(std::string processName, size_t memory_size);
-    rr_create_process(processName, memory_size);
-}
 
 /**
  * Checks for the config.txt file and reads its contents to get values
@@ -354,17 +338,12 @@ bool readConfig(){
                 MAX_OVERALL_MEM = std::stoi(value);
             } else if (key == "mem-per-frame") {
                 MEM_PER_FRAME = std::stoi(value);
-            } else if (key == "min-mem-per-proc") {
-                MIN_MEM_PER_PROC = std::stoi(value);
-            } else if (key == "max-mem-per-proc") {
-                MAX_MEM_PER_PROC = std::stoi(value);
+            } else if (key == "mem-per-proc") {
+                MEM_PER_PROC = std::stoi(value);
             }
         }
     }
     configFile.close();
-
-    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_FRAME;
-
     initFlag = true;
     return true;
 }
@@ -377,15 +356,29 @@ bool isValidMemorySize(size_t size) {
 }
 
 bool vmStat(){
-    cout << "\n";
-    cout << "Total memory     : " << get_total_memory() << " bytes\n";
-    cout << "Used memory      : " << get_used_memory() << " bytes\n";
-    cout << "Free memory      : " << get_free_memory() << " bytes\n";
-    cout << "Idle CPU ticks   : " << get_idle_cpu_ticks() << "\n";
-    cout << "Active CPU ticks : " << get_active_cpu_ticks() << "\n";
-    cout << "Total CPU ticks  : " << get_total_cpu_ticks() << "\n";
-    cout << "Num paged in     : " << get_pages_paged_in() << "\n";
-    cout << "Num paged out    : " << get_pages_paged_out() << "\n";
+    // This function now reads its data directly from the MemoryManager's public counters.
+    
+    // First, check if the manager exists to prevent a crash if 'vmstat' is called before 'initialize'.
+    if (memory_manager == nullptr) {
+        std::cout << "\nSystem not initialized. Please run 'initialize' first." << std::endl;
+        return false;
+    }
+    
+    std::cout << "\n";
+    std::cout << "Total memory     : " << MAX_OVERALL_MEM << " bytes\n";
+    // Get used and free memory from the manager's methods.
+    std::cout << "Used memory      : " << memory_manager->get_used_memory_bytes() << " bytes\n";
+    std::cout << "Free memory      : " << memory_manager->get_free_memory_bytes() << " bytes\n";
+    
+    // Get CPU ticks from the existing vmstat system (this part is still correct).
+    std::cout << "Idle CPU ticks   : " << get_idle_cpu_ticks() << "\n";
+    std::cout << "Active CPU ticks : " << get_active_cpu_ticks() << "\n";
+    std::cout << "Total CPU ticks  : " << get_total_cpu_ticks() << "\n";
+
+    // --- THIS IS THE CRITICAL FIX ---
+    // Read the page counters directly from the MemoryManager's atomic variables.
+    std::cout << "Num paged in     : " << memory_manager->pages_paged_in << "\n";
+    std::cout << "Num paged out    : " << memory_manager->pages_paged_out << "\n";
     return true;
 }
 
@@ -399,7 +392,7 @@ bool vmStat(){
 string processCommand(const string& cmd) {
     auto manager = ScreenManager::getInstance(); 
     vector<string> tokens = tokenize(cmd);
-
+    
     vector<string> validCommands = {
         "initialize", "screen", "scheduler-start", "marquee",
         "scheduler-stop", "report-util", "vmstat", "process-smi", "clear", "exit"
@@ -438,7 +431,6 @@ string processCommand(const string& cmd) {
 
     // Handle screen commands 
     if (tokens[0] == "screen" && initFlag == true) {
-        // Modified: Added memory size handling for screen -s
         if (tokens.size() >= 4 &&  tokens[1] == "-s") {
             if (process_maker_running) {
                 try {
@@ -473,57 +465,18 @@ string processCommand(const string& cmd) {
             } else {
                 return "Screen not found: " + tokens[2]; 
             }
-        } else if (tokens.size() >= 2 && tokens[1] == "-ls") {
+        } else if (tokens.size() >= 2 && tokens[1] == "-ls") { // Added size check for safety
             if (scheduler == "fcfs") {
                 fcfs_displayTest();
             } else if (scheduler == "rr") {
                 rr_displayTest();
             }
             return "";
-        } else if (tokens.size() >= 2 && tokens[1] == "-c") {
+        }else if (tokens.size() >= 2 && tokens[1] == "-c") { // Added size check for safety
             //TODO: Ability to add a set of user-defined instructions when creating a process.
-            string processName = tokens[2];
-            size_t memorySize = tokens.size() == 5
-                ? stoi(tokens[3]) 
-                : 0;
-
-            size_t quote_start = cmd.find('"');
-            size_t quote_end = cmd.rfind('"');
-
-            if (quote_start == std::string::npos || quote_end == std::string::npos || quote_end <= quote_start)
-                return "invalid command: missing instruction quotes";
-
-            std::string instructionBlock = cmd.substr(quote_start + 1, quote_end - quote_start - 1);
-            
-            vector<std::string> instructions;
-            std::stringstream ss(instructionBlock);
-            std::string instruction;
-
-            while (std::getline(ss, instruction, ';')) {
-                instruction.erase(0, instruction.find_first_not_of(" \t\r\n")); // trim left
-                instruction.erase(instruction.find_last_not_of(" \t\r\n") + 1); // trim right
-                if (!instruction.empty()) {
-                    instructions.push_back(instruction);
-                }
-            }   
-
-            if (instructions.size() < 1 || instructions.size() > 50) {
-                 return "invalid command: instruction count must be between 1 and 50";
-            }
-            
-            //just to check
-            // std::cout << "\nParsed Instructions (" << instructions.size() << "):" << std::endl;
-            // for (size_t i = 0; i < instructions.size(); ++i) {
-            //     std::cout << i + 1 << ": " << instructions[i] << "\n" << std::endl;
-            // }
-
-            //call function depending on scheduler
-            if (scheduler == "rr") {
-                rr_create_process_with_commands(processName, memorySize, instructions);
-            } else if (scheduler == "fcfs") {
-                // fcfs_create_process_with_commands(processName, memorySize, instructions);
-            } 
-            return "Created process " + processName + " with instructions.";
+            return "screen -c not yet implemented.";
+        } else {
+            return "Invalid 'screen' command syntax.";
         }
     }else if (tokens[0] == "screen" && initFlag == false){
         return "use the 'initialize' command before using other commands";
@@ -574,9 +527,7 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "scheduler-stop"){
-            //stop the scheduler thread
             process_maker_running = false;
-
             return "scheduler stopped";
         }
 
@@ -585,7 +536,6 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "vmstat"){
-            //TODO: add function to view a detailed view of the active/inactive processes, available/used memory, and pages.
             if(vmStat() == false){
                 return "error: cannot retrieve information for vmstat"; 
             }
@@ -593,11 +543,6 @@ string processCommand(const string& cmd) {
         }
 
         if (cmd == "process-smi"){
-            //TODO: add function to provide a summarized view of the available/used memory, as well as the list of processes and memory occupied. This is similar to the “nvidia-smi” command.
-            // std::thread snap(process_smi::printSnapshot); 
-            // snap.detach(); 
-            // return "";
-
             std::cout << '\n'; 
             process_smi::printSnapshot(); 
             std::cout << std::endl; 
@@ -615,8 +560,7 @@ string processCommand(const string& cmd) {
 
         if (cmd == "exit") exit(0);
     }
-    //If command was not recognized
-
+    
     return "Unknown command: " + cmd;
 }
 

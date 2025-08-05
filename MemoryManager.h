@@ -4,6 +4,7 @@
 #include <deque>
 #include <vector>
 #include <memory>
+#include <atomic>
 #include "Process.h" // Use our new unified Process class
 
 class MemoryManager {
@@ -13,8 +14,8 @@ private:
 
 public:
     // --- STATISTICS FOR VMSTAT ---
-    int pages_paged_in;
-    int pages_paged_out;
+    std::atomic<int> pages_paged_in;
+    std::atomic<int> pages_paged_out;
     int get_free_memory_bytes();
     int get_used_memory_bytes();
 
