@@ -199,11 +199,11 @@ void rr_scheduler_thread_func() {
             
             memory_manager->allocate_for_process(*pcb, request.memory_size);
 
-            // pcb->commands.push_back("write 0x0 42");
-            // pcb->commands.push_back("read 0x0");
-            // pcb->commands.push_back("write 0x100 101");
-            // pcb->commands.push_back("read 0x100");
-            // pcb->commands.push_back("read 0xFFFF");
+            pcb->commands.push_back("write 0x0 42");
+            pcb->commands.push_back("read 0x0");
+            pcb->commands.push_back("write 0x100 101");
+            pcb->commands.push_back("read 0x100");
+            pcb->commands.push_back("read 0xFFFF");
 
             rr_g_ready_queue.push_back(pcb); 
         }
@@ -226,6 +226,57 @@ void rr_scheduler_thread_func() {
             }
         }
     }
+}
+
+std::vector<std::string> rr_tokenizePrintStatement(const std::string& input) {
+    std::vector<std::string> tokens;
+    
+    // Find the positions of key elements
+    size_t openParen = input.find('(');
+    size_t closeParen = input.rfind(')');
+    
+    // Check if the format is correct
+    if (openParen == std::string::npos || closeParen == std::string::npos || 
+        openParen >= closeParen) {
+        return tokens; // return empty vector if format is invalid
+    }
+    
+    // Extract the content inside parentheses
+    std::string content = input.substr(openParen + 1, closeParen - openParen - 1);
+    
+    // Find the positions of the quote marks
+    size_t firstQuote = content.find('"');
+    size_t secondQuote = content.rfind('"');
+    
+    // Check if there are quoted strings
+    if (firstQuote != std::string::npos && secondQuote != std::string::npos && 
+        firstQuote < secondQuote) {
+        // Extract the quoted text
+        std::string quotedText = content.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+        tokens.push_back(quotedText);
+        
+        // Extract the remaining part after the quoted text
+        std::string remaining = content.substr(secondQuote + 1);
+        
+        // Remove any + signs and whitespace
+        remaining.erase(std::remove(remaining.begin(), remaining.end(), '+'), remaining.end());
+        remaining.erase(std::remove(remaining.begin(), remaining.end(), ' '), remaining.end());
+        
+        if (!remaining.empty()) {
+            tokens.push_back(remaining);
+        }
+    } else {
+        // If no quotes, just process the entire content
+        std::string cleaned = content;
+        cleaned.erase(std::remove(cleaned.begin(), cleaned.end(), '+'), cleaned.end());
+        cleaned.erase(std::remove(cleaned.begin(), cleaned.end(), ' '), cleaned.end());
+        
+        if (!cleaned.empty()) {
+            tokens.push_back(cleaned);
+        }
+    }
+    
+    return tokens;
 }
 
 // --- The CPU Worker Thread ---
@@ -251,11 +302,13 @@ void rr_core_worker_func(int core_id) {
 
             const std::string& command_str = my_process->commands[my_process->program_counter];
             bool instruction_succeeded = true;
-
+            
             std::istringstream iss(command_str);
             std::string command_token;
             iss >> command_token;
             
+            
+
             if (command_token == "read" || command_token == "write") {
                 int address;
                 iss >> std::hex >> address; 
