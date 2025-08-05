@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <thread>
 #include <algorithm>
+#include <cstdint>
 
 // --- Central Headers ---
 #include "global.h" // Provides all global variables and class definitions
@@ -105,8 +106,75 @@ void rr_addCommand() { variable_a = variable_b + variable_c; }
 void rr_subtractCommand() { variable_a = variable_b - variable_c; }
 void rr_sleepCommand() { /* Does nothing for now */ }
 void rr_forCommand() { for (int i = 0; i < 5; i++) { rr_addCommand(); } }
-void rr_declareCommand() { /* Your declare logic would go here */ }
+void rr_declareCommand(std::shared_ptr<Process> process, std::string varA, uint16_t value) {
+    // Check if variable already exists
+    bool found = false;
+    for (auto& [name, val] : process->variables) {
+        if (name == varA) {
+            val = value;  // Update existing value
+            found = true;
+            break;
+        }
+    }
+    
+    // If variable doesn't exist, add it
+    if (!found) {
+        process->variables.emplace_back(varA, value);
+    }
+}
 
+void rr_readCommand(std::shared_ptr<Process> process, std::string varA, std::string memory) {
+    uint16_t mem_value = 0;
+    
+    // Find the value in memory_variables
+    for (auto& [name, value] : memory_variables) {
+        if (name == memory) {
+            mem_value = value;
+            break;
+        }
+    }
+
+    // Update the variable in process->variables
+    bool found = false;
+    for (auto& [name, value] : process->variables) {
+        if (name == varA) {
+            value = mem_value;  // Write the memory value to the variable
+            found = true;
+            break;
+        }
+    }
+    
+    // If varA doesn't exist in process->variables, add it
+    if (!found) {
+        process->variables.emplace_back(varA, mem_value);
+    }
+}
+
+void rr_writeCommand(std::shared_ptr<Process> process, std::string memory, std::string varA) {
+    uint16_t mem_value = 0;
+    
+    // Find the value in memory_variables
+    for (auto& [name, value] : process->variables) {
+        if (name == varA) {
+            mem_value = value;
+            break;
+        }
+    }
+
+    // Update the variable in process->variables
+    bool found = false;
+    for (auto& [name, value] : memory_variables) {
+        if (name == memory) {
+            value = mem_value;  // Write the memory value to the variable
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        process->variables.emplace_back(varA, mem_value);
+    }
+}
 
 // --- The Scheduler Thread ---
 void rr_scheduler_thread_func() {
@@ -131,11 +199,11 @@ void rr_scheduler_thread_func() {
             
             memory_manager->allocate_for_process(*pcb, request.memory_size);
 
-            pcb->commands.push_back("write 0x0 42");
-            pcb->commands.push_back("read 0x0");
-            pcb->commands.push_back("write 0x100 101");
-            pcb->commands.push_back("read 0x100");
-            pcb->commands.push_back("read 0xFFFF");
+            // pcb->commands.push_back("write 0x0 42");
+            // pcb->commands.push_back("read 0x0");
+            // pcb->commands.push_back("write 0x100 101");
+            // pcb->commands.push_back("read 0x100");
+            // pcb->commands.push_back("read 0xFFFF");
 
             rr_g_ready_queue.push_back(pcb); 
         }

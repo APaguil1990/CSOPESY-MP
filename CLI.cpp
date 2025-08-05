@@ -29,6 +29,7 @@
 using namespace std;
 
 std::deque<ProcessCreationRequest> g_creation_queue;
+std::vector<std::tuple<std::string, uint16_t>> memory_variables;
 
 // RR Scheduler Globals
 std::deque<std::shared_ptr<Process>> rr_g_ready_queue;
@@ -341,12 +342,15 @@ bool readConfig(){
                 MAX_OVERALL_MEM = std::stoi(value);
             } else if (key == "mem-per-frame") {
                 MEM_PER_FRAME = std::stoi(value);
-            } else if (key == "mem-per-proc") {
-                MEM_PER_PROC = std::stoi(value);
+            } else if (key == "min-mem-per-proc") {
+                MIN_MEM_PER_PROC = std::stoi(value);
+            } else if (key == "max-mem-per-proc") {
+                MAX_MEM_PER_PROC = std::stoi(value);
             }
         }
     }
     configFile.close();
+    FRAME_COUNT = MAX_OVERALL_MEM / MEM_PER_FRAME;
     initFlag = true;
     return true;
 }
@@ -505,7 +509,7 @@ string processCommand(const string& cmd) {
                 // fcfs_create_process_with_commands(processName, memorySize, instructions);
             } 
             return "Created process " + processName + " with instructions.";
-            
+
         } else {
             return "Invalid 'screen' command syntax.";
         }

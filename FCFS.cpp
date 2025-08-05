@@ -13,6 +13,7 @@
 #include <atomic>
 #include <sstream>
 #include <random>
+#include <cstdint>
 
 #include "global.h"
 #include "FCFS.h"
@@ -300,6 +301,23 @@ void fcfs_create_process(std::string processName, size_t memory_size, MemoryMana
 
 }
 
+void fcfs_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands) {
+    // Create a new process
+    std::shared_ptr<Process> pcb;
+    
+    pcb = std::make_shared<Process>(cpuClocks);
+    pcb->start_time = std::chrono::system_clock::now(); 
+    pcb->processName = processName;
+    pcb->memory_size = memory_size;
+
+    pcb->commands = commands;
+
+    cpuClocks++;
+    fcfs_g_ready_queue.push_back(pcb);
+
+    // Notify scheduler that a new process is available
+    fcfs_g_scheduler_cv.notify_one();
+}
 
 // Function that creates processes
 // --- MODIFIED: To use MemoryManager and include robust shutdown logic ---

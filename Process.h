@@ -49,6 +49,8 @@ public:
     int assigned_core = -1;
     std::vector<std::string> log_file;
 
+    std::vector<std::tuple<std::string, uint16_t>> variables;
+
     // --- RR-Specific Field ---
     int commands_executed_this_quantum = 0;
 

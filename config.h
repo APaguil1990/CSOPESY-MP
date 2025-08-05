@@ -1,7 +1,9 @@
 #ifndef configs
 #define configs
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 extern int CPU_COUNT;
 extern std::string scheduler;
@@ -25,6 +27,8 @@ extern unsigned short variable_c;
 extern int cpuClocks;
 
 extern bool process_maker_running;
+
+extern std::vector<std::tuple<std::string, uint16_t>> memory_variables;
 
 #endif
 

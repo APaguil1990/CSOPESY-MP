@@ -27,7 +27,7 @@ long get_total_memory() {
 }
 
 long compute_used_memory(int memory_process){
-    used_memory = memory_process * MEM_PER_PROC;
+    used_memory = memory_process * MIN_MEM_PER_PROC;
     return 0;
 }
 
