@@ -26,7 +26,6 @@ struct PageTableEntry {
     int frame_index = -1;
 };
 
-// ADDED: Memory data now includes comprehensive error and state info
 struct MemoryData {
     size_t memory_size_bytes;
     long long creation_timestamp;
@@ -39,7 +38,6 @@ struct MemoryData {
     std::chrono::system_clock::time_point termination_time;
     int invalid_address = -1;
     
-    // Mutex and CV for handling page faults cleanly
     std::mutex page_fault_mutex;
     std::condition_variable page_fault_cv;
 };

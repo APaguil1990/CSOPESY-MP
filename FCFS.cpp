@@ -14,29 +14,24 @@
 #include <random>
 #include <algorithm>
 
-// --- Central Headers ---
-#include "global.h" // Corrected to 'global.h' as you specified
+#include "global.h"
 #include "FCFS.h"
-#include "config.h"
 
-// --- File-local variables ---
 std::random_device fcfs_rd;
 std::mt19937 fcfs_gen(fcfs_rd());
 
-// --- Forward Declarations ---
 void fcfs_scheduler_thread_func();
 void fcfs_core_worker_func(int core_id);
 
-// --- Helper Function to Format Time ---
 std::string fcfs_format_time(const std::chrono::system_clock::time_point& tp, const std::string& fmt) {
     auto t = std::chrono::system_clock::to_time_t(tp);
-    auto tm = *std::localtime(&t);
+    std::tm tm_buf;
+    localtime_s(&tm_buf, &t);
     std::stringstream ss;
-    ss << std::put_time(&tm, fmt.c_str());
+    ss << std::put_time(&tm_buf, fmt.c_str());
     return ss.str();
 }
 
-// --- The Scheduler Thread ---
 void fcfs_scheduler_thread_func() {
     while (fcfs_g_is_running) {
         std::unique_lock<std::mutex> lock(fcfs_g_process_mutex);
@@ -44,24 +39,18 @@ void fcfs_scheduler_thread_func() {
         fcfs_g_scheduler_cv.wait(lock, [&]() {
             if (!fcfs_g_is_running) return true;
             bool core_is_free = std::any_of(fcfs_g_running_processes.begin(), fcfs_g_running_processes.end(), [](const auto& p){ return p == nullptr; });
-            // CORRECTION: The scheduler should also wake up for creation requests.
             return !g_creation_queue.empty() || !fcfs_g_blocked_queue.empty() || (core_is_free && !fcfs_g_ready_queue.empty());
         });
 
         if (!fcfs_g_is_running) break;
 
-        // --- NEW: Handle Process Creation Requests (for consistency with RR) ---
         while (!g_creation_queue.empty()) {
             ProcessCreationRequest request = g_creation_queue.front();
             g_creation_queue.pop_front();
             
-            std::shared_ptr<Process> pcb = std::make_shared<Process>(cpuClocks++);
-            pcb->start_time = std::chrono::system_clock::now();
-            pcb->processName = request.name;
-            
+            std::shared_ptr<Process> pcb = std::make_shared<Process>(cpuClocks++, request.name);
             memory_manager->allocate_for_process(*pcb, request.memory_size);
 
-            // Add valid commands
             if (request.memory_size > 2) {
                 pcb->commands.push_back("write 0x0 111");
                 pcb->commands.push_back("read 0x0");
@@ -69,7 +58,6 @@ void fcfs_scheduler_thread_func() {
             fcfs_g_ready_queue.push_back(pcb); 
         }
 
-        // --- Unblock processes ---
         while (!fcfs_g_blocked_queue.empty()) {
             std::shared_ptr<Process> unblocked_process = fcfs_g_blocked_queue.front();
             fcfs_g_blocked_queue.pop_front();
@@ -77,7 +65,6 @@ void fcfs_scheduler_thread_func() {
             fcfs_g_ready_queue.push_back(unblocked_process);
         }
 
-        // --- Assign ready processes to cores ---
         for (int i = 0; i < CPU_COUNT; ++i) {
             if (fcfs_g_running_processes[i] == nullptr && !fcfs_g_ready_queue.empty()) {
                 std::shared_ptr<Process> process = fcfs_g_ready_queue.front();
@@ -90,7 +77,6 @@ void fcfs_scheduler_thread_func() {
     }
 }
 
-// --- The CPU Worker Thread ---
 void fcfs_core_worker_func(int core_id) {
     while (fcfs_g_is_running) {
         std::shared_ptr<Process> my_process = nullptr;
@@ -100,7 +86,7 @@ void fcfs_core_worker_func(int core_id) {
         }
 
         if (my_process) {
-            while (my_process->program_counter < my_process->commands.size()) {
+            while (static_cast<size_t>(my_process->program_counter) < my_process->commands.size()) {
                 const std::string& command_str = my_process->commands[my_process->program_counter];
                 std::istringstream iss(command_str);
                 std::string command_token;
@@ -161,15 +147,9 @@ void fcfs_core_worker_func(int core_id) {
     }
 }
 
-// --- UI Functions ---
-// In FCFS.cpp
-
-// --- UI Functions ---
 void fcfs_display_processes() {
-    // Lock the mutex for a consistent snapshot.
     std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
     
-    // --- NEW: Calculate CPU Utilization ---
     int busyCores = 0;
     for (const auto& p : fcfs_g_running_processes) {
         if (p != nullptr) {
@@ -178,17 +158,12 @@ void fcfs_display_processes() {
     }
     int cpuUtil = CPU_COUNT > 0 ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
 
-    // --- Display the output ---
     std::cout << "\n-------------------------------------------------------------\n";
-    
-    // Print the new CPU utilization line.
     std::cout << "CPU Utilization: " << cpuUtil << "%" << std::endl;
 
-    // The rest of your original display logic remains.
     std::cout << "\nRunning processes:\n";
     for (const auto& p : fcfs_g_running_processes) {
         if (p) {
-            // Updated to use your original, more detailed format
             std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
                       << " (" << fcfs_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
                       << "\tCore: " << p->assigned_core
@@ -198,7 +173,6 @@ void fcfs_display_processes() {
 
     std::cout << "\nFinished processes:\n";
     for (const auto& p : fcfs_g_finished_processes) {
-        // Updated to use your original, more detailed format
         std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
                   << " (" << fcfs_format_time(p->finish_time, "%m/%d/%Y %I:%M:%S%p") << ")"
                   << "\tFinished"
@@ -208,21 +182,16 @@ void fcfs_display_processes() {
 }
 
 void fcfs_write_processes() {
-    // Lock the mutex to get a consistent snapshot of the process lists.
     std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
     
-    // Open the log file in append mode.
     std::ofstream outfile("csopesy-log.txt", std::ios::app); 
     
     if (!outfile.is_open()) {
-        // Use cerr for errors, as it's unbuffered.
         std::cerr << "Error: Unable to open file csopesy-log.txt for writing." << std::endl;
         return;
     }
 
     outfile << "\n--------------------- FCFS REPORT ---------------------\n";
-
-    // --- NEW: Calculate CPU Utilization (same as the display function) ---
     int busyCores = 0;
     for (const auto& p : fcfs_g_running_processes) {
         if (p != nullptr) {
@@ -232,7 +201,6 @@ void fcfs_write_processes() {
     int cpuUtil = CPU_COUNT > 0 ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
     outfile << "CPU Utilization: " << cpuUtil << "%" << std::endl;
 
-    // --- Print the lists (using your original detailed format) ---
     outfile << "\nRunning processes:\n";
     for (const auto& p : fcfs_g_running_processes) {
         if (p) {
@@ -257,21 +225,17 @@ void fcfs_write_processes() {
     outfile.close();
 }
 
-// --- The Process Generator for 'scheduler-start' ---
-// CORRECTION: This now adds requests to the shared queue.
 void fcfs_create_processes(MemoryManager& mm) {
     process_maker_running = true;
     while (process_maker_running) {
         {
-            // Lock the appropriate mutex. FCFS should use its own, but we can share for simplicity.
             std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
-            g_creation_queue.push_back({"fcfs_proc" + std::to_string(cpuClocks), 128});
+            g_creation_queue.push_back({"fcfs_proc" + std::to_string(cpuClocks), 128, {}});
         }
         fcfs_g_scheduler_cv.notify_one();
         std::this_thread::sleep_for(std::chrono::milliseconds(processFrequency));
     }
 
-    // --- Shutdown Logic ---
     while (true) {
         bool all_done;
         {
@@ -286,7 +250,6 @@ void fcfs_create_processes(MemoryManager& mm) {
     fcfs_g_scheduler_cv.notify_all();
 }
 
-// --- The Main Scheduler Entry Point ---
 int FCFS() {
     fcfs_g_is_running = true;
     

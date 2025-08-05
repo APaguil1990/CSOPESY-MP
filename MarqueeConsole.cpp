@@ -1,378 +1,238 @@
-#include "MarqueeConsole.h" 
-#include <sstream> 
-#include <algorithm> 
-#include <chrono> 
+#define NOMINMAX // Crucial to prevent windows.h from breaking std::max
+#include "MarqueeConsole.h"
+#include <sstream>
+#include <chrono>
 #include <iomanip>
 
-using namespace std; 
-using namespace std::chrono_literals; 
+using namespace std;
+using namespace std::chrono_literals;
 
-// Constructor: Initializes console state and hides cursor
-MarqueeConsole::MarqueeConsole() : 
-    hConsole(GetStdHandle(STD_OUTPUT_HANDLE)), 
+// This is the function you call from CLI.cpp
+void runMarquee() {
+    try {
+        MarqueeConsole console;
+        console.run();
+    } catch (const exception& e) {
+        cerr << "Error in MarqueeConsole: " << e.what() << endl;
+    }
+}
+
+// Constructor
+MarqueeConsole::MarqueeConsole() :
+    HEADER_ART({
+        R"(.___  ___.      ___      .______        ______      __    __   _______  _______      ______   ______   .__   __.      _______.  ______    __       _______ )",
+        R"(|   \/   |     /   \     |   _  \      /  __  \    |  |  |  | |   ____||   ____|    /      | /  __  \  |  \ |  |     /       | /  __  \  |  |     |   ____|)",
+        R"(|  \  /  |    /  ^  \    |  |_)  |    |  |  |  |   |  |  |  | |  |__   |  |__      |  ,----'|  |  |  | |   \|  |    |   (----`|  |  |  | |  |     |  |__   )",
+        R"(|  |\/|  |   /  /_\  \   |      /     |  |  |  |   |  |  |  | |   __|  |   __|     |  |     |  |  |  | |  . `  |     \   \    |  |  |  | |  |     |   __|  )",
+        R"(|  |  |  |  /  _____  \  |  |\  \----.|  `--'  '--.|  `--'  | |  |____ |  |____    |  `----.|  `--'  | |  |\   | .----)   |   |  `--'  | |  `----.|  |____ )",
+        R"(|__|  |__| /__/     \__\ | _| `._____| \_____\_____\\______/  |_______||_______|    \______| \______/  |__| \__| |_______/     \______/  |_______||_______|)"
+    }),
+    HEADER_LINES(HEADER_ART.size()),
+    RESERVED_LINES(3),
+    START_Y(HEADER_LINES + 1),
+    hConsole(GetStdHandle(STD_OUTPUT_HANDLE)),
     running(true) {
-    
-    // Initialize marquee text and position
+
     state = {
-        "Hello World, I am a Marquee Text Implemented with Multithreading :)", 
-        50, 
-        0,
-        START_Y, 
-        1, 
-        1, 
-        {0, static_cast<SHORT>(START_Y)}, 
-        0, 
-        "", 
-        "", 
-        10
+        "CSOPESY Marquee! Commands: speed <ms>, text <new_text>, clear, quit",
+        50, 0, START_Y, 1, 1,
+        {0, static_cast<SHORT>(START_Y)}, 0, "", "Enter a command below."
     };
 
-    // Set cursor invisible
-    GetConsoleCursorInfo(hConsole, &cursorInfo); 
-    cursorInfo.bVisible = false; 
-    SetConsoleCursorInfo(hConsole, &cursorInfo); 
-    
-    // Clear console and print header
+    GetConsoleCursorInfo(hConsole, &cursorInfo);
+    cursorInfo.bVisible = false;
+    SetConsoleCursorInfo(hConsole, &cursorInfo);
     initializeConsole();
-
-    // Cache current console width
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
-    lastWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 }
 
-// Destructor: Stops threads and restores cursor
+// Destructor
 MarqueeConsole::~MarqueeConsole() {
-    running = false; 
-
-    // Wait threads to finish 
-    if (updateThread && updateThread->joinable()) updateThread->join(); 
-    if (inputThread && inputThread->joinable()) inputThread->join(); 
-
-    // Restore cursor 
-    cursorInfo.bVisible = true; 
-    SetConsoleCursorInfo(hConsole, &cursorInfo); 
-} 
-
-int MarqueeConsole::getMonitorRefreshRate() {
-    DEVMODE devMode = {}; 
-    devMode.dmSize = sizeof(DEVMODE); 
-
-    if (EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &devMode)) {
-        return devMode.dmDisplayFrequency; 
-    }
-    return 60;
+    running = false;
+    if (updateThread && updateThread->joinable()) updateThread->join();
+    if (inputThread && inputThread->joinable()) inputThread->join();
+    cursorInfo.bVisible = true;
+    SetConsoleCursorInfo(hConsole, &cursorInfo);
 }
 
-// Display ASCII header at top of screen 
-void MarqueeConsole::printHeader() {
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
-    int width = csbi.srWindow.Right - csbi.srWindow.Left + 1; 
-    lastWidth = width; 
-
-    COORD headerPos = {0, 0}; 
-    SetConsoleCursorPosition(hConsole, headerPos); 
-
-    for (const string& line : HEADER_ART) {
-        string displayLine = line.substr(0, static_cast<size_t>(width));
-        int padding = (width - static_cast<int>(line.length())) / 2; 
-        padding = max(0, padding); 
-        cout << string(padding, ' ') << displayLine << string(width - padding - displayLine.length(), ' ') << endl;
-    }
+void MarqueeConsole::run() {
+    updateThread = make_unique<thread>(&MarqueeConsole::updateMarquee, this);
+    inputThread = make_unique<thread>(&MarqueeConsole::inputHandler, this);
+    renderUI();
 }
 
-// Clear the console
-void MarqueeConsole::clearScreen(bool withHeader) {
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
-
-    COORD clearStart = {0, static_cast<SHORT>(withHeader ? 0 : HEADER_LINES)}; 
-    DWORD cells = csbi.dwSize.X * (csbi.dwSize.Y - (withHeader ? 0 : HEADER_LINES)); 
-    DWORD written; 
-
-    FillConsoleOutputCharacter(hConsole, ' ', cells, clearStart, &written); 
-    SetConsoleCursorPosition(hConsole, clearStart); 
-
-    if (withHeader) printHeader();
-}
-
-// Clear single text line at specific console coordinate
-void MarqueeConsole::clearPosition(COORD pos, int length) {
-    if (pos.Y >= HEADER_LINES) {
-        SetConsoleCursorPosition(hConsole, pos); 
-        cout << string(length, ' ') << flush; 
-    }
-}
-
-// Parses and handles user input commands like speed, text, clear, and quit
-void MarqueeConsole::processCommand(const string& cmd) {
-    lock_guard<mutex> lock(stateMutex); 
-    istringstream iss(cmd); 
-    string action; 
-    iss >> action; 
-
-    std::transform(action.begin(), action.end(), action.begin(), ::tolower); 
-
-    std::ostringstream oss; 
-
-    if (action == "speed") {
-        int newSpeed; 
-
-        if (iss >> newSpeed && newSpeed > 0) {
-            state.sleepDuration = newSpeed; 
-            // state.outputMsg = format("Changed speed to {}", newSpeed);  
-            oss << "Changed speed to " << newSpeed;
-        } else {
-            // state.outputMsg = "Invalid speed value!"; 
-            oss << "Invalid speed value!";
-        }
-        state.outputMsg = oss.str();
-    } else if (action == "text") {
-        size_t pos = cmd.find(' '); 
-
-        if (pos != string::npos && pos + 1 < cmd.length()) {
-            string newText = cmd.substr(pos + 1); 
-            clearPosition(state.prevMarqueePos, state.text.length()); 
-            state.text = newText; 
-            // state.outputMsg = format("Text changed to '{}'", newText); 
-            oss << "Text changed to '" << newText << "'"; 
-        } else {
-            // state.outputMsg = "Error: Please provide text after 'text' command :)"; 
-            oss << "Error: Please provide text after 'text' command :)";
-        } 
-        state.outputMsg = oss.str();
-    } else if (action == "pollrate") {
-        int newRate; 
-
-        if (iss >> newRate && newRate >= 1 && newRate <= 1000) {
-            state.pollingInterval = newRate; 
-            // state.outputMsg = format("Polling interval set to {} ms", newRate); 
-            oss << "Polling interval set to " << newRate << " ms";
-        } else {
-            // state.outputMsg = "Invalid pollrate value (1 - 1000 ms allowed)"; 
-            oss << "Invalid pollrate value (1 - 1000 ms allowed)"; 
-        } 
-        state.outputMsg = oss.str();
-    } else if (action == "clear") {
-        stateMutex.unlock(); 
-
-        // Get screen buffer 
-        CONSOLE_SCREEN_BUFFER_INFO csbi; 
-        GetConsoleScreenBufferInfo(hConsole, &csbi);
-
-        COORD topLeft = {0, 0}; 
-        DWORD written; 
-        DWORD totalCells = csbi.dwSize.X * csbi.dwSize.Y; 
-
-        // Clear console with spaces 
-        FillConsoleOutputCharacter(hConsole, ' ', totalCells, topLeft, &written); 
-        FillConsoleOutputAttribute(hConsole, csbi.wAttributes, totalCells, topLeft, &written);
-
-        // Reset cursor to top-left 
-        SetConsoleCursorPosition(hConsole, topLeft); 
-
-        // Redraw header and set cursor after it 
-        printHeader(); 
-        stateMutex.lock();
-
-        state.outputMsg = "Terminal cleared.";
-    } else if (action == "quit" || action == "Quit") {
-        running = false; 
-        state.outputMsg = "Goodbye, Have a Nice Day :)"; 
-    } else {
-        // state.outputMsg = format("Unknown command: {}", cmd); 
-        oss << "Unknown command: " << cmd; 
-        state.outputMsg = oss.str();
-    }
-} 
-
-// Handles terminal resize events and reprints header if needed
-void MarqueeConsole::handleResize() {
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
-    int width = csbi.srWindow.Right - csbi.srWindow.Left + 1; 
-
-    if (width != lastWidth) {
-        lock_guard<mutex> lock(stateMutex); 
-        clearScreen(true); 
-        lastWidth = width;
-    }
-}
-
-// Updates marquee text's movement and bouncing behavior
 void MarqueeConsole::updateMarquee() {
-    int refreshRate = getMonitorRefreshRate(); 
-    int frameDelay = 1000 / refreshRate;
-    
     while (running) {
-        handleResize();
-        DWORD currentTime = GetTickCount(); 
+        lock_guard<mutex> lock(stateMutex);
+        DWORD currentTime = GetTickCount();
+        if (currentTime - state.lastUpdateTime >= static_cast<DWORD>(state.sleepDuration)) {
+            CONSOLE_SCREEN_BUFFER_INFO csbi;
+            GetConsoleScreenBufferInfo(hConsole, &csbi);
+            const int width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+            const int height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+            const int maxY = height - RESERVED_LINES - 1;
 
-        if (state.y < START_Y) {
-            state.y = START_Y; 
-            state.dy *= -1;
+            clearPosition(state.prevMarqueePos, state.text.length());
+            state.x += state.dx;
+            state.y += state.dy;
+            
+            const int textLen = static_cast<int>(state.text.length());
+            const int xBound = std::max(0, width - textLen);
+
+            if (state.x < 0) { state.x = 0; state.dx *= -1; }
+            else if (state.x > xBound) { state.x = xBound; state.dx *= -1; }
+
+            if (state.y < START_Y) { state.y = START_Y; state.dy *= -1; }
+            else if (state.y > maxY) { state.y = maxY; state.dy *= -1; }
+
+            state.prevMarqueePos = {static_cast<SHORT>(state.x), static_cast<SHORT>(state.y)};
+            SetConsoleCursorPosition(hConsole, state.prevMarqueePos);
+            cout << state.text << flush;
+            state.lastUpdateTime = currentTime;
         }
-
-        {
-            lock_guard<mutex> lock(stateMutex); 
-
-            if (currentTime - state.lastUpdateTime >= state.sleepDuration) {
-                CONSOLE_SCREEN_BUFFER_INFO csbi; 
-                GetConsoleScreenBufferInfo(hConsole, &csbi); 
-                const int maxX = csbi.srWindow.Right; 
-                const int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
-
-                clearPosition(state.prevMarqueePos, state.text.length()); 
-
-                state.x += state.dx; 
-                state.y += state.dy; 
-
-                const int textLen = static_cast<int>(state.text.length()); 
-                const int xBound = max(0, maxX - textLen); 
-                const int yBound = max(START_Y + 1, maxY); 
-
-                if (state.x < 0 || state.x > xBound) state.dx *= -1; 
-                if (state.y < START_Y || state.y > yBound) state.dy *= -1; 
-
-                state.x = clamp(state.x, 0, xBound); 
-                state.y = clamp(state.y, START_Y, yBound); 
-
-                state.prevMarqueePos= {
-                    static_cast<SHORT>(state.x), 
-                    static_cast<SHORT>(state.y) 
-                };
-                state.lastUpdateTime = currentTime; 
-
-                SetConsoleCursorPosition(hConsole, state.prevMarqueePos); 
-                cout << state.text << flush; 
-            }
-        }
-        // this_thread::sleep_for(10ms); 
-        this_thread::sleep_for(std::chrono::milliseconds(frameDelay));
+        this_thread::sleep_for(1ms);
     }
 }
 
-// Draws input and output UI components at the bottom 
-void MarqueeConsole::renderUI() {
-    while (running) {
-        handleResize(); 
-
-        if (stateMutex.try_lock()) {
-            CONSOLE_SCREEN_BUFFER_INFO csbi; 
-            GetConsoleScreenBufferInfo(hConsole, &csbi); 
-            int maxX = csbi.srWindow.Right; 
-            int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
-
-            COORD inputPos = {0, static_cast<SHORT>(maxY + 1)}; 
-            SetConsoleCursorPosition(hConsole, inputPos); 
-
-            std::ostringstream ossInput;
-            // cout << format("Input Command: {:<{}}", state.inputBuffer, maxX - 15);  
-            ossInput << "Input Command: " << std::left << std::setw(maxX - 15) << state.inputBuffer; 
-            std::cout << ossInput.str();
-
-            COORD outputPos = {0, static_cast<SHORT>(maxY + 2)}; 
-            SetConsoleCursorPosition(hConsole, outputPos); 
-
-            std::ostringstream ossOutput;
-            // cout << format("{:<{}}", state.outputMsg.substr(0, maxX), maxX); 
-            ossOutput << std::left << std::setw(maxX) << state.outputMsg.substr(0, maxX); 
-            std::cout << ossOutput.str();
-
-            stateMutex.unlock();
-        }
-        this_thread::sleep_for(20ms);
-    }
-}
-
-// Collects keystrokes in real time and builds input commands
 void MarqueeConsole::inputHandler() {
-    int refreshRate = getMonitorRefreshRate(); 
-    int frameDelay = 1000 / refreshRate; 
-    
     while (running) {
         if (_kbhit()) {
-            char ch = _getch(); 
-            std::string command;
-
-            {
-                lock_guard<mutex> lock(stateMutex); 
+            char ch = _getch();
+            string commandToProcess;
+            { 
+                lock_guard<mutex> lock(stateMutex);
                 if (ch == '\r') {
-                    command = state.inputBuffer; 
-                    state.inputBuffer.clear(); 
+                    commandToProcess = state.inputBuffer;
+                    state.inputBuffer.clear();
                 } else if (ch == '\b' && !state.inputBuffer.empty()) {
-                    state.inputBuffer.pop_back(); 
+                    state.inputBuffer.pop_back();
                 } else if (isprint(ch)) {
-                    state.inputBuffer += ch; 
+                    state.inputBuffer += ch;
                 }
             }
-
-            // Process command *after* releasing lock
-            if (!command.empty()) {
-                processCommand(command); 
+            if (!commandToProcess.empty()) {
+                processCommand(commandToProcess);
+                if (commandToProcess == "quit") {
+                    running = false;
+                }
             }
         }
-        // this_thread::sleep_for(10ms); 
-        this_thread::sleep_for(std::chrono::milliseconds(frameDelay));
-        this_thread::sleep_for(chrono::milliseconds(state.pollingInterval));
+        this_thread::sleep_for(10ms);
     }
 }
 
-// Clears screen and pritns initial header at top 
-void MarqueeConsole::initializeConsole() {
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
+void MarqueeConsole::renderUI() {
+    while (running) {
+        handleResize();
+        {
+            lock_guard<mutex> lock(stateMutex);
+            CONSOLE_SCREEN_BUFFER_INFO csbi;
+            GetConsoleScreenBufferInfo(hConsole, &csbi);
+            int width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+            int height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+            int maxY = height - RESERVED_LINES - 1;
 
-    COORD topLeft = {0, 0}; 
-    DWORD written; 
-    FillConsoleOutputCharacter(hConsole, ' ', csbi.dwSize.X * csbi.dwSize.Y, topLeft, &written); 
-    SetConsoleCursorPosition(hConsole, topLeft); 
-    printHeader(); 
+            COORD inputPos = {0, static_cast<SHORT>(maxY + 1)};
+            SetConsoleCursorPosition(hConsole, inputPos);
+            cout << "Input Command: " << left << setw(width - 16) << state.inputBuffer;
+
+            COORD outputPos = {0, static_cast<SHORT>(maxY + 2)};
+            SetConsoleCursorPosition(hConsole, outputPos);
+            cout << left << setw(width) << state.outputMsg.substr(0, width);
+        }
+        this_thread::sleep_for(33ms);
+    }
 }
 
-// Main thread: Starts and reders the UI
-void MarqueeConsole::run() {
-    // Start threads 
-    updateThread = make_unique<thread>( [this] { updateMarquee(); } ); 
-    inputThread = make_unique<thread>( [this] { this->inputHandler(); } ); 
+void MarqueeConsole::processCommand(const string& cmd) {
+    lock_guard<mutex> lock(stateMutex);
+    istringstream iss(cmd);
+    string action;
+    iss >> action;
+    transform(action.begin(), action.end(), action.begin(), ::tolower);
 
-    // Main UI 
-    renderUI(); 
-
-    {
-        lock_guard<mutex> lock(stateMutex); 
-
-        CONSOLE_SCREEN_BUFFER_INFO csbi; 
-        GetConsoleScreenBufferInfo(hConsole, &csbi); 
-        int maxX = csbi.srWindow.Right; 
-        int maxY = csbi.srWindow.Bottom - RESERVED_LINES; 
-
-        // Output message at bottom 
-        COORD outputPos = {0, static_cast<SHORT>(maxY + 2)}; 
-        SetConsoleCursorPosition(hConsole, outputPos); 
+    if (action == "speed") {
+        int newSpeed;
+        if (iss >> newSpeed && newSpeed > 0) {
+            state.sleepDuration = newSpeed;
+            state.outputMsg = "Speed changed to " + to_string(newSpeed) + " ms.";
+        } else {
+            state.outputMsg = "Invalid speed value. Must be a positive number.";
+        }
+    } else if (action == "text") {
+        string newText;
+        getline(iss, newText);
+        size_t first = newText.find_first_not_of(' ');
+        if (string::npos != first) newText = newText.substr(first);
         
-        // std::cout << std::format("{:<{}}", state.outputMsg.substr(0, maxX), maxX); 
-        std::ostringstream oss;
-        oss << std::left << std::setw(maxX) << state.outputMsg.substr(0, maxX); 
-        std::cout << oss.str();
+        if (!newText.empty()) {
+            clearPosition(state.prevMarqueePos, state.text.length());
+            state.text = newText;
+            state.outputMsg = "Text changed.";
+        } else {
+            state.outputMsg = "Error: Please provide text after 'text' command.";
+        }
+    } else if (action == "clear") {
+        clearScreenPart(true);
+        state.outputMsg = "Terminal cleared.";
+    } else if (action == "quit") {
+        state.outputMsg = "Quitting...";
+    } else {
+        state.outputMsg = "Unknown command: '" + cmd + "'";
     }
-
-    // Assurance prompt doesn't overwrite message 
-    CONSOLE_SCREEN_BUFFER_INFO csbi; 
-    GetConsoleScreenBufferInfo(hConsole, &csbi); 
-    COORD exitPos = {0, static_cast<SHORT>(csbi.srWindow.Bottom)}; 
-    SetConsoleCursorPosition(hConsole, exitPos); 
-    std::cout << std::endl << std::flush; 
 }
 
-int marquee() {
-    try {
-        MarqueeConsole console; 
-        console.run(); 
-    } catch (const exception& e) {
-        cerr << "Error: " << e.what() << endl; 
-        return EXIT_FAILURE; 
-    } 
-    return EXIT_SUCCESS;
+void MarqueeConsole::initializeConsole() {
+    clearScreenPart(true);
+}
+
+void MarqueeConsole::printHeader() {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    int width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    lastWidth = width;
+
+    COORD headerPos = {0, 0};
+    SetConsoleCursorPosition(hConsole, headerPos);
+
+    for (const string& line : HEADER_ART) {
+        int padding = (width - static_cast<int>(line.length())) / 2;
+        padding = std::max(0, padding);
+        cout << string(padding, ' ') << line << endl;
+    }
+}
+
+void MarqueeConsole::handleResize() {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    int width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+
+    if (width != lastWidth) {
+        lock_guard<mutex> lock(stateMutex);
+        clearScreenPart(true);
+    }
+}
+
+void MarqueeConsole::clearPosition(COORD pos, int length) {
+    DWORD written;
+    FillConsoleOutputCharacterA(hConsole, ' ', length, pos, &written);
+}
+
+void MarqueeConsole::clearScreenPart(bool fullScreen) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    DWORD written;
+    COORD startPos = {0, 0};
+    DWORD cellsToClear = csbi.dwSize.X * csbi.dwSize.Y;
+
+    if (!fullScreen) {
+        startPos.Y = HEADER_LINES;
+        cellsToClear = csbi.dwSize.X * (csbi.dwSize.Y - HEADER_LINES);
+    }
+
+    FillConsoleOutputCharacter(hConsole, ' ', cellsToClear, startPos, &written);
+    SetConsoleCursorPosition(hConsole, startPos);
+
+    if (fullScreen) {
+        printHeader();
+    }
 }

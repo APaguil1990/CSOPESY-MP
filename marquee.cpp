@@ -1,3 +1,7 @@
+// FIX: Add these two lines at the very top
+#define NOMINMAX
+#include <algorithm>
+
 #include <iostream> 
 #include <string> 
 #include <windows.h> 
@@ -7,6 +11,7 @@
 #include <iterator> 
 #include <vector>
 
+#include "global.h"
 using namespace std; 
 
 // ASCII Header Art 
