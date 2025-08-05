@@ -19,6 +19,11 @@ int memoryCycle = 0;
 std::random_device rr_rd;
 std::mt19937 rr_gen(rr_rd());
 
+// --- Forward Declarations for functions defined in this file ---
+void rr_scheduler_thread_func();
+void rr_core_worker_func(int core_id);
+void rr_addCommand(); // Needed by rr_forCommand
+
 // --- Helper Function to Format Time ---
 std::string rr_format_time(const std::chrono::system_clock::time_point& tp, const std::string& fmt) {
     auto t = std::chrono::system_clock::to_time_t(tp);
@@ -43,58 +48,52 @@ void display_memory() {
     std::ostringstream filename;
     filename << "memory_stamp_" << memoryCycle++ << ".txt";
     std::ofstream memory_file(filename.str());
-
     auto frame_snapshot = memory_manager->get_frame_snapshot();
-    
     int occupied_frames = 0;
     for(const auto& frame : frame_snapshot) {
-        if (!frame.is_free) {
-            occupied_frames++;
-        }
+        if (!frame.is_free) { occupied_frames++; }
     }
-
     memory_file << "Timestamp: (" << rr_format_time(std::chrono::system_clock::now(), "%m/%d/%Y %I:%M:%S%p") << ")" << std::endl;
     memory_file << "Total Frames: " << frame_snapshot.size() << std::endl;
     memory_file << "Occupied Frames: " << occupied_frames << std::endl;
     memory_file << "Unused Frames: " << frame_snapshot.size() - occupied_frames << std::endl << std::endl;
     memory_file << "---- Memory Layout (Top to Bottom) ----" << std::endl;
     memory_file << "----end---- = " << MAX_OVERALL_MEM << std::endl;
-
     std::map<int, std::string> pid_to_name_map;
     {
         std::lock_guard<std::mutex> lock(rr_g_process_mutex);
         auto populate_map = [&](const auto& process_list){
-            for(const auto& p : process_list) {
-                if(p) pid_to_name_map[p->id] = p->processName;
-            }
+            for(const auto& p : process_list) { if(p) pid_to_name_map[p->id] = p->processName; }
         };
         populate_map(rr_g_ready_queue);
         populate_map(rr_g_running_processes);
         populate_map(rr_g_blocked_queue);
         populate_map(rr_g_finished_processes);
     }
-    
     for (int i = frame_snapshot.size() - 1; i >= 0; --i) {
         const auto& frame = frame_snapshot[i];
         long long upper_bound = (long long)(i + 1) * MEM_PER_FRAME;
         long long lower_bound = (long long)i * MEM_PER_FRAME;
-
         memory_file << upper_bound << std::endl;
-        if (frame.is_free) {
-            memory_file << "[  FREE  ]" << std::endl;
-        } else {
+        if (frame.is_free) { memory_file << "[  FREE  ]" << std::endl; } 
+        else {
             std::string name = "PID " + std::to_string(frame.owner_pid);
-            if(pid_to_name_map.count(frame.owner_pid)) {
-                name = pid_to_name_map[frame.owner_pid];
-            }
+            if(pid_to_name_map.count(frame.owner_pid)) { name = pid_to_name_map[frame.owner_pid]; }
             memory_file << name << std::endl;
         }
         memory_file << lower_bound << std::endl << std::endl;
     }
-
     memory_file << "----start---- = 0" << std::endl;
     memory_file.close();
 }
+
+// --- Non-Memory Command Helpers ---
+void rr_addCommand() { variable_a = variable_b + variable_c; }
+void rr_subtractCommand() { variable_a = variable_b - variable_c; }
+void rr_sleepCommand() { /* Does nothing for now */ }
+void rr_forCommand() { for (int i = 0; i < 5; i++) { rr_addCommand(); } }
+void rr_declareCommand() { /* Your declare logic would go here */ }
+
 
 // --- The Scheduler Thread ---
 void rr_scheduler_thread_func() {
@@ -109,7 +108,6 @@ void rr_scheduler_thread_func() {
 
         if (!rr_g_is_running) break;
 
-        // Priority 1: Handle process creation requests from the CLI
         while (!g_creation_queue.empty()) {
             ProcessCreationRequest request = g_creation_queue.front();
             g_creation_queue.pop_front();
@@ -120,31 +118,15 @@ void rr_scheduler_thread_func() {
             
             memory_manager->allocate_for_process(*pcb, request.memory_size);
 
-             pcb->commands.push_back("write 0x0 123"); 
-            
-            // This will read the value back.
+            pcb->commands.push_back("write 0x0 42");
             pcb->commands.push_back("read 0x0");
-
-            // This calculates an address in the middle of the process's allocated memory,
-            // which is guaranteed to be a valid address.
-            if (request.memory_size > 16) { // Make sure there's enough space
-                int middle_address = request.memory_size / 2;
-                
-                // We use a stringstream to build the command string with the calculated hex address.
-                std::stringstream ss;
-                ss << "write 0x" << std::hex << middle_address << " 456";
-                pcb->commands.push_back(ss.str());
-
-                // Clear the stringstream to reuse it for the read command.
-                ss.str("");
-                ss.clear();
-                ss << "read 0x" << std::hex << middle_address;
-                pcb->commands.push_back(ss.str());
+            pcb->commands.push_back("write 0x100 101");
+            pcb->commands.push_back("read 0x100");
+            pcb->commands.push_back("read 0xFFFF");
 
             rr_g_ready_queue.push_back(pcb); 
         }
 
-        // Priority 2: Unblock processes
         while (!rr_g_blocked_queue.empty()) {
             std::shared_ptr<Process> unblocked_process = rr_g_blocked_queue.front();
             rr_g_blocked_queue.pop_front();
@@ -152,7 +134,6 @@ void rr_scheduler_thread_func() {
             rr_g_ready_queue.push_back(unblocked_process);
         }
 
-        // Priority 3: Assign ready processes to cores
         for (int i = 0; i < CPU_COUNT; ++i) {
             if (rr_g_running_processes[i] == nullptr && !rr_g_ready_queue.empty()) {
                 std::shared_ptr<Process> process = rr_g_ready_queue.front();
@@ -164,7 +145,6 @@ void rr_scheduler_thread_func() {
             }
         }
     }
-}
 }
 
 // --- The CPU Worker Thread ---
@@ -204,17 +184,22 @@ void rr_core_worker_func(int core_id) {
 
                 if (my_process->mem_data.terminated_by_error) {
                     instruction_succeeded = false;
-                    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-                    std::cout << "\nProcess " << my_process->processName << " terminated: " << my_process->mem_data.termination_reason << std::endl;
-                    my_process->state = ProcessState::FINISHED;
-                    rr_g_finished_processes.push_back(my_process);
-                    rr_g_running_processes[core_id] = nullptr;
-                    memory_manager->deallocate_for_process(*my_process);
-                    rr_g_scheduler_cv.notify_one();
+                    {
+                        std::lock_guard<std::mutex> lock(g_cout_mutex);
+                        std::cout << "\nProcess " << my_process->processName << " terminated: " << my_process->mem_data.termination_reason << std::endl;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+                        my_process->state = ProcessState::FINISHED;
+                        rr_g_finished_processes.push_back(my_process);
+                        rr_g_running_processes[core_id] = nullptr;
+                        memory_manager->deallocate_for_process(*my_process);
+                        rr_g_scheduler_cv.notify_one();
+                    }
                 } else if (physical_ptr == nullptr) {
                     instruction_succeeded = false;
                     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-                    my_process->state = ProcessState::BLOCKED; // Set state to BLOCKED
+                    my_process->state = ProcessState::BLOCKED;
                     rr_g_blocked_queue.push_back(my_process);
                     rr_g_running_processes[core_id] = nullptr;
                     rr_g_scheduler_cv.notify_one();
@@ -259,29 +244,27 @@ void rr_core_worker_func(int core_id) {
     }
 }
 
-
-// --- UI Functions (These should be compatible, but kept for your reference) ---
+// --- UI Functions ---
 void rr_display_processes() {
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
     std::cout << "\n-------------------------------------------------------------\n";
-    // ... [Your original display logic here] ...
     std::cout << "\nRunning processes:\n";
     for (const auto& p : rr_g_running_processes) {
         if (p) {
-            std::cout << "process" << p->id << " (" << p->processName << ")\n";
+            std::cout << "  " << p->processName << " (ID: " << p->id << ")\n";
         }
     }
     std::cout << "\nFinished processes:\n";
     for (const auto& p : rr_g_finished_processes) {
         if (p) {
-            std::cout << "process" << p->id << " (" << p->processName << ")\n";
+            std::cout << "  " << p->processName << " (ID: " << p->id << ")\n";
         }
     }
     std::cout << "-------------------------------------------------------------\n\n";
 }
 
 void rr_write_processes() {
-    // ... [Your original write logic here] ...
+    // Your original write logic can go here, using the same loops as rr_display_processes
 }
 
 // --- The Process Generator for 'scheduler-start' ---
@@ -290,7 +273,6 @@ void rr_create_processes(MemoryManager& mm) {
     while (process_maker_running) {
         {
             std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-            // Add a request to the creation queue. The scheduler will handle the rest.
             g_creation_queue.push_back({"process" + std::to_string(cpuClocks), 256});
         }
         rr_g_scheduler_cv.notify_one();

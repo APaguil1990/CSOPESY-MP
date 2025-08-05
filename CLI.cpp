@@ -358,13 +358,13 @@ bool isValidMemorySize(size_t size) {
 bool vmStat(){
     cout << "\n";
     cout << "Total memory     : " << get_total_memory() << " bytes\n";
-    cout << "Used memory      : " << memory_manager->get_used_memory_bytes() << " bytes\n";
-    cout << "Free memory      : " << memory_manager->get_free_memory_bytes() << " bytes\n";
+    cout << "Used memory      : " << get_used_memory() << " bytes\n";
+    cout << "Free memory      : " << get_free_memory() << " bytes\n";
     cout << "Idle CPU ticks   : " << get_idle_cpu_ticks() << "\n";
     cout << "Active CPU ticks : " << get_active_cpu_ticks() << "\n";
     cout << "Total CPU ticks  : " << get_total_cpu_ticks() << "\n";
-    cout << "Num paged in     : " << memory_manager->pages_paged_in << "\n";
-    cout << "Num paged out    : " << memory_manager->pages_paged_out << "\n";
+    cout << "Num paged in     : " << get_pages_paged_in() << "\n";
+    cout << "Num paged out    : " << get_pages_paged_out() << "\n";
     return true;
 }
 
