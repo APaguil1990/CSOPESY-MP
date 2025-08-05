@@ -568,9 +568,9 @@ int main() {
     auto screen_manager = ScreenManager::getInstance();
     clearScreen();
 
-    // --- Thread handle for the main scheduler ---
+    // Thread handle for the main scheduler.
     std::thread scheduler_thread;
-    bool scheduler_running = false;
+    bool scheduler_is_launched = false;
 
     string input;
     while (true) {
@@ -580,24 +580,28 @@ int main() {
         if (!screen_manager->screenActive()) {
             cout << "root:\\> ";
         } else {
+            // Reverted to your original, working prompt logic
             cout << "Screen active (type 'quit' to return): ";
         }
 
-        if (!getline(cin, input)) { break; } // Exit on input failure
+        if (!getline(cin, input)) { 
+            // Handle Ctrl+C or other input stream failures
+            cout << "\nInput stream closed. Exiting." << endl;
+            break; 
+        }
         
-        // --- CRITICAL CHANGE: Initialization is handled first ---
+        // --- Initialization and Scheduler Launching Logic ---
         if (!initFlag && input == "initialize") {
             cout << "Initializing..." << endl;
             if (readConfig()) {
-                // --- Create the Memory Manager HERE, and ONLY here ---
                 if (memory_manager == nullptr) {
                     memory_manager = new MemoryManager(rr_g_ready_queue, rr_g_running_processes, fcfs_g_ready_queue, fcfs_g_running_processes);
                 }
-                initFlag = true; // Mark initialization as complete
+                initFlag = true;
                 cout << "Initialization successful. Scheduler: " << scheduler << endl;
 
-                // --- Launch the main scheduler thread AFTER manager is created ---
-                if (!scheduler_running) {
+                // Launch the appropriate scheduler thread and detach it.
+                if (!scheduler_is_launched) {
                     if (scheduler == "rr") {
                         scheduler_thread = std::thread(RR);
                         scheduler_thread.detach();
@@ -605,38 +609,53 @@ int main() {
                         scheduler_thread = std::thread(FCFS);
                         scheduler_thread.detach();
                     }
-                    scheduler_running = true;
+                    scheduler_is_launched = true;
                 }
             } else {
                 cout << "Initialization failed. Check config.txt." << endl;
             }
-            continue; // Go to the next loop iteration to get a new command
+            // After initialize, we loop again to get the next command.
+            continue; 
         }
 
-        // --- All other commands are processed here ---
+        // --- Process all other commands ---
         string cmd_output = processCommand(input);
         
         if (input == "exit") {
-            break;
+            break; // Exit the main input loop to begin shutdown.
         }
 
-        if (!cmd_output.empty()) {
-            // ... (your existing output logic is fine)
+        // --- THIS IS THE RESTORED OUTPUT LOGIC (NO PLACEHOLDERS) ---
+        if (cmd_output == "SCREEN CLEARED") {
+            // Do nothing, clearScreen was already handled.
+        }
+        else if (!cmd_output.empty()) {
+            // Display command output at the correct, fixed position.
+            clearOutputLine();
+            COORD outputPos = {0, outputLineY};
+            SetConsoleCursorPosition(hConsole, outputPos);
+            cout << cmd_output;
+            
+            // Return the cursor to the input position for the next command.
+            COORD inputPos = {0, inputLineY};
+            SetConsoleCursorPosition(hConsole, inputPos);
         }
     }
 
-    // --- Final Shutdown ---
-    cout << "Shutting down..." << endl;
-    process_maker_running = false; // Signal generator to stop
-    rr_g_is_running = false;
-    fcfs_g_is_running = false;
+    // --- Final Shutdown Sequence ---
+    cout << "\nShutting down scheduler and worker threads..." << endl;
+    process_maker_running = false; // Signal the process generator to stop
+    rr_g_is_running = false;       // Signal RR threads to stop
+    fcfs_g_is_running = false;     // Signal FCFS threads to stop
+    
+    // Wake up any sleeping threads so they can see the 'is_running' flag is false.
     rr_g_scheduler_cv.notify_all();
     fcfs_g_scheduler_cv.notify_all();
     
-    // Give detached threads a moment to clean up
+    // Give detached threads a moment to clean up and exit.
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-    delete memory_manager; // Clean up the allocated memory
-    cout << "\nProgram finished." << endl;
+    delete memory_manager; // Clean up the dynamically allocated memory manager.
+    cout << "Program finished." << endl;
     return 0;
 }

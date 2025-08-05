@@ -251,8 +251,27 @@ void rr_core_worker_func(int core_id) {
 
 // --- UI Functions ---
 void rr_display_processes() {
+    // Lock the mutex to ensure we get a consistent snapshot of the process lists.
     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+    
+    // --- NEW: Calculate CPU Utilization ---
+    int busyCores = 0;
+    // Count how many cores are not idle.
+    for (const auto& p : rr_g_running_processes) {
+        if (p != nullptr) {
+            busyCores++;
+        }
+    }
+    // Calculate percentage, avoiding division by zero.
+    int cpuUtil = CPU_COUNT > 0 ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
+
+    // --- Display the output ---
     std::cout << "\n-------------------------------------------------------------\n";
+    
+    // Print the new CPU utilization line.
+    std::cout << "CPU Utilization: " << cpuUtil << "%" << std::endl;
+
+    // The rest of your original display logic remains.
     std::cout << "\nRunning processes:\n";
     for (const auto& p : rr_g_running_processes) {
         if (p) {
@@ -291,6 +310,7 @@ void rr_create_processes(MemoryManager& mm) {
             std::lock_guard<std::mutex> lock(rr_g_process_mutex);
             g_creation_queue.push_back({"process" + std::to_string(cpuClocks++), 256});
         }
+        std::cout << "TEST" << std::endl;
         rr_g_scheduler_cv.notify_one();
         std::this_thread::sleep_for(std::chrono::milliseconds(processFrequency));
     }
