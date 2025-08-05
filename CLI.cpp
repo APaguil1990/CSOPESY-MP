@@ -63,7 +63,8 @@ int delayPerExec = 100000; // delay between executing next instruction [0, 2^32]
 
 int MAX_OVERALL_MEM = 0;
 int MEM_PER_FRAME = 0;
-int MEM_PER_PROC = 0;
+int MIN_MEM_PER_PROC = 0;
+int MAX_MEM_PER_PROC = 0;
 
 int FRAME_COUNT = 0;
 
@@ -265,6 +266,8 @@ void runRR(){
     RR();
 }
 
+void rr_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands);
+void fcfs_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands);
 
 void fcfs_generate_processes() {
     void fcfs_create_processes(MemoryManager& mm);
@@ -460,7 +463,49 @@ string processCommand(const string& cmd) {
             return "";
         }else if (tokens.size() >= 2 && tokens[1] == "-c") { // Added size check for safety
             //TODO: Ability to add a set of user-defined instructions when creating a process.
-            return "screen -c not yet implemented.";
+            string processName = tokens[2];
+            size_t memorySize = tokens.size() == 5
+                ? stoi(tokens[3]) 
+                : 0;
+
+            size_t quote_start = cmd.find('"');
+            size_t quote_end = cmd.rfind('"');
+
+            if (quote_start == std::string::npos || quote_end == std::string::npos || quote_end <= quote_start)
+                return "invalid command: missing instruction quotes";
+
+            std::string instructionBlock = cmd.substr(quote_start + 1, quote_end - quote_start - 1);
+            
+            vector<std::string> instructions;
+            std::stringstream ss(instructionBlock);
+            std::string instruction;
+
+            while (std::getline(ss, instruction, ';')) {
+                instruction.erase(0, instruction.find_first_not_of(" \t\r\n")); // trim left
+                instruction.erase(instruction.find_last_not_of(" \t\r\n") + 1); // trim right
+                if (!instruction.empty()) {
+                    instructions.push_back(instruction);
+                }
+            }   
+
+            if (instructions.size() < 1 || instructions.size() > 50) {
+                 return "invalid command: instruction count must be between 1 and 50";
+            }
+            
+            //just to check
+            // std::cout << "\nParsed Instructions (" << instructions.size() << "):" << std::endl;
+            // for (size_t i = 0; i < instructions.size(); ++i) {
+            //     std::cout << i + 1 << ": " << instructions[i] << "\n" << std::endl;
+            // }
+
+            //call function depending on scheduler
+            if (scheduler == "rr") {
+                rr_create_process_with_commands(processName, memorySize, instructions);
+            } else if (scheduler == "fcfs") {
+                // fcfs_create_process_with_commands(processName, memorySize, instructions);
+            } 
+            return "Created process " + processName + " with instructions.";
+            
         } else {
             return "Invalid 'screen' command syntax.";
         }

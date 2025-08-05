@@ -43,6 +43,7 @@ public:
     std::atomic<ProcessState> state;
     std::vector<std::string> commands;
     size_t program_counter = 0;
+    size_t memory_size = 0;
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point finish_time;
     int assigned_core = -1;

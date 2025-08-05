@@ -7,6 +7,7 @@
 #include <map> 
 #include <algorithm>
 #include <thread>
+#include <algorithm>
 
 // --- Central Headers ---
 #include "global.h" // Provides all global variables and class definitions
@@ -41,6 +42,18 @@ std::vector<std::string> rr_getRunningProcessNames() {
         if (p) out.emplace_back(p->processName);
     } 
     return out;
+}
+
+std::vector<std::string> rr_tokenize(const std::string& str) {
+    std::vector<std::string> tokens;
+    std::istringstream iss(str);
+    std::string token;
+    
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+    
+    return tokens;
 }
 
 // --- Helper for Memory Logging ---
@@ -294,6 +307,25 @@ void rr_create_processes(MemoryManager& mm) {
     rr_g_is_running = false;
     rr_g_scheduler_cv.notify_all();
 }
+
+void rr_create_process_with_commands(std::string processName, size_t memory_size, const std::vector<std::string>& commands) {
+    // Create a new process
+    std::shared_ptr<Process> pcb;
+    
+    pcb = std::make_shared<Process>(cpuClocks);
+    pcb->start_time = std::chrono::system_clock::now(); 
+    pcb->processName = processName;
+    pcb->memory_size = memory_size;
+
+    pcb->commands = commands;
+
+    cpuClocks++;
+    rr_g_ready_queue.push_back(pcb);
+
+    // Notify scheduler that a new process is available
+    rr_g_scheduler_cv.notify_one();
+}
+
 
 // --- The Main Scheduler Entry Point ---
 int RR() {
