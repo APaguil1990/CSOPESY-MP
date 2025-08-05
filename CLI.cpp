@@ -463,7 +463,7 @@ string processCommand(const string& cmd) {
                 rr_create_process_with_commands(processName, memorySize, instructions);
             } else if (scheduler == "fcfs") {
                 // fcfs_create_process_with_commands(processName, memorySize, instructions);
-            }
+            } 
             return "Created process " + processName + " with instructions.";
         }
     }else if (tokens[0] == "screen" && initFlag == false){

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <ostream>
@@ -223,7 +224,17 @@ void rr_scheduler_thread_func() {
     }
 }
 
-
+std::vector<std::string> rr_tokenize(const std::string& str) {
+    std::vector<std::string> tokens;
+    std::istringstream iss(str);
+    std::string token;
+    
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+    
+    return tokens;
+}
 
 // --- CPU Worker Thread Function ---
 void rr_core_worker_func(int core_id) { // executes cmds
@@ -242,21 +253,28 @@ void rr_core_worker_func(int core_id) { // executes cmds
 
                 vmstats_increment_active_ticks();
 
-                if (command.compare("declare") == 0) {
+                std::vector<std::string> words = rr_tokenize(command);
+
+                if (words[0].compare("declare") == 0) {
                     rr_declareCommand();
                     
-                } else if (command.compare("add") == 0) {
+                } else if (words[0].compare("add") == 0) {
                     rr_addCommand();
 
-                } else if (command.compare("sub") == 0) {
+                } else if (words[0].compare("sub") == 0) {
                     rr_subtractCommand();
 
-                } else if (command.compare("sleep") == 0) {
+                } else if (words[0].compare("sleep") == 0) {
                     rr_sleepCommand();
 
-                } else if (command.compare("for") == 0) {
+                } else if (words[0].compare("for") == 0) {
                     rr_forCommand();
 
+                } else if (words[0].compare("read") == 0) {
+                    rr_forCommand();
+
+                } else if (words[0].compare("write") == 0) {
+                    rr_forCommand();
 
                 } else {
                     // log file in memory
@@ -321,18 +339,31 @@ void rr_search_process(std::string process_search) {
 
     std::cout << "\n-------------------------------------------------------------\n";
 
-    if (!rr_g_ready_queue.empty() || rr_g_running_processes.front() != nullptr) {
-        search_vector.insert(search_vector.end(), rr_g_ready_queue.begin(), rr_g_ready_queue.end());
-        search_vector.insert(search_vector.end(), rr_g_running_processes.begin(), rr_g_running_processes.end());
+    // Check if any container has processes
+    bool has_processes = !rr_g_ready_queue.empty() || 
+                        !rr_g_finished_processes.empty() ||
+                        std::any_of(rr_g_running_processes.begin(), 
+                                   rr_g_running_processes.end(),
+                                   [](const auto& p) { return p != nullptr; });
 
+    if (has_processes) {
+        // Add non-null processes from each container
+        for (const auto& p : rr_g_ready_queue) {
+            if (p) search_vector.push_back(p);
+        }
+        
+        for (const auto& p : rr_g_running_processes) {
+            if (p) search_vector.push_back(p);
+        }
+        
+        for (const auto& p : rr_g_finished_processes) {
+            if (p) search_vector.push_back(p);
+        }
+
+        // Search for the process
         for (const auto& p : search_vector) {
-            int i = 0;
-            if (process_search.compare(p->processName) == 0) {
+            if (p && process_search == p->processName) {
                 process = p;
-                break;
-            }
-            i++;
-            if (i < search_vector.size()) {
                 break;
             }
         }
@@ -344,13 +375,9 @@ void rr_search_process(std::string process_search) {
         } else {
             std::cout << "Process not found" << std::endl;
         }
-
-
     } else {
         std::cout << "Currently no processes running or waiting to run";
     }
-
-    
 
     std::cout << "\n-------------------------------------------------------------\n";
 }
@@ -512,6 +539,14 @@ void rr_create_process_with_commands(std::string processName, size_t memory_size
     pcb->memory_size = memory_size;
 
     pcb->commands = commands;
+
+    std::cout << "TEST" << std::endl;
+
+    for(const std::string& line : pcb-> commands) {
+        std::cout << line << std::endl;
+    }
+
+    std::cout << "TEST \n\n\n\n" << std::endl;
 
     cpuClocks++;
     rr_g_ready_queue.push_back(pcb);
