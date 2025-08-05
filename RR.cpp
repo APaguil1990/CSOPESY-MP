@@ -165,6 +165,7 @@ void rr_scheduler_thread_func() {
         }
     }
 }
+}
 
 // --- The CPU Worker Thread ---
 void rr_core_worker_func(int core_id) {
