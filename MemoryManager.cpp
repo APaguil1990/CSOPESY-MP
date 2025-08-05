@@ -4,10 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include <mutex>
-
-// Defined in RR.cpp and FCFS.cpp, needed for locking
-extern std::mutex rr_g_process_mutex;
-extern std::mutex fcfs_g_process_mutex;
+#include "global.h"
 
 const std::string BACKING_STORE_FILE = "csopesy-backing-store.txt";
 
@@ -165,7 +162,15 @@ int MemoryManager::get_used_memory_bytes() {
 }
 
 void MemoryManager::allocate_for_process(Process& process, size_t requested_size) {
-     std::cout << "\nDEBUG: [MemoryManager] Allocating " << requested_size << " bytes for process '" << process.processName << "'." << std::endl;
+    // --- THIS IS THE FIX for the garbled console output ---
+    // We lock the global cout mutex before printing to prevent other threads from interrupting.
+    {
+        std::lock_guard<std::mutex> lock(g_cout_mutex);
+        std::cout << "\nDEBUG: [MemoryManager] Allocating " << requested_size << " bytes for process '" << process.processName << "'." << std::endl;
+    }
+    // The lock is automatically released here when the block ends.
+
+    // The rest of your function's logic is correct.
     process.mem_data.memory_size_bytes = requested_size;
     process.mem_data.backing_store_offset = p_impl->next_backing_store_offset;
     process.mem_data.creation_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -176,8 +181,7 @@ void MemoryManager::allocate_for_process(Process& process, size_t requested_size
     process.mem_data.page_table.resize(num_pages);
     
     // NOTE: For thread safety, the file operations should be locked.
-    // If you add a std::mutex p_impl->backing_store_mutex;, you would lock it here.
-    // std::lock_guard<std::mutex> lock(p_impl->backing_store_mutex);
+    // As noted, you would add a std::lock_guard for your file mutex here.
     
     std::vector<char> zero_buffer(requested_size, 0);
     p_impl->backing_store_stream.seekp(p_impl->next_backing_store_offset);
