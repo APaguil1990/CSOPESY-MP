@@ -41,3 +41,12 @@ extern int MAX_OVERALL_MEM;
 
 // Test helper to return snapshot of running-process names 
 std::vector<std::string> rr_getRunningProcessNames();
+
+class MemoryManager; // Forward declaration is enough
+
+// --- Public Function Declarations ONLY ---
+int RR();
+void rr_create_processes(MemoryManager& mm);
+void rr_display_processes();
+void rr_write_processes();
+std::vector<std::string> rr_getRunningProcessNames();
