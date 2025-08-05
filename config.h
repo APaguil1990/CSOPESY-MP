@@ -13,7 +13,8 @@ extern int delayPerExec;
 
 extern int MAX_OVERALL_MEM;
 extern int MEM_PER_FRAME;
-extern int MEM_PER_PROC;
+extern int MIN_MEM_PER_PROC;
+extern int MAX_MEM_PER_PROC;
 
 extern int FRAME_COUNT;
 
