@@ -1,5 +1,5 @@
-#ifndef GLOBALS_H
-#define GLOBALS_H
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
 #include <vector>
 #include <deque>
@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <cstddef>
+#include <unordered_map>
 
 // Forward declare complex types to avoid including full headers
 #include "Process.h"
@@ -23,9 +24,18 @@ extern MemoryManager* memory_manager;
 struct ProcessCreationRequest {
     std::string name;
     size_t memory_size;
+    std::vector<std::string> commands; // ADDED: For 'screen -c'
 };
 extern std::deque<ProcessCreationRequest> g_creation_queue;
+extern std::mutex g_creation_queue_mutex; // ADDED: Mutex for the queue
+
+// Global Process Map for easy lookup by name ('screen -r')
+extern std::unordered_map<std::string, std::shared_ptr<Process>> g_process_map;
+extern std::mutex g_process_map_mutex;
+
+// System State
 extern std::atomic<bool> g_system_initialized;
+extern std::atomic<bool> g_is_shutting_down;
 extern std::mutex g_cout_mutex;
 
 // RR Scheduler Globals
@@ -48,8 +58,8 @@ extern std::atomic<bool> fcfs_g_is_running;
 
 // Other global variables
 extern int CPU_COUNT;
-extern bool process_maker_running;
-extern int cpuClocks;
+extern std::atomic<bool> process_maker_running; // MODIFIED: Made atomic for thread safety
+extern std::atomic<int> cpuClocks; // MODIFIED: Made atomic
 extern std::string scheduler;
 extern int qCycles;
 extern int processFrequency;
@@ -58,9 +68,8 @@ extern int MAX_INS;
 extern int delayPerExec;
 extern int MAX_OVERALL_MEM;
 extern int MEM_PER_FRAME;
-extern int MEM_PER_PROC;
-extern unsigned short variable_a;
-extern unsigned short variable_b;
-extern unsigned short variable_c;
+extern int MIN_MEM_PER_PROC; // ADDED: From config
+extern int MAX_MEM_PER_PROC; // ADDED: From config
 
-#endif // GLOBALS_H
+
+#endif // GLOBAL_H

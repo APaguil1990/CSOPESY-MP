@@ -8,13 +8,16 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
+#include <unordered_map>
+#include <cstdint> // For uint16_t
 
 enum class ProcessState {
     NEW,
     READY,
     RUNNING,
     BLOCKED,
-    FINISHED
+    FINISHED,
+    TERMINATED // ADDED: For error state
 };
 
 struct PageTableEntry {
@@ -23,14 +26,20 @@ struct PageTableEntry {
     int frame_index = -1;
 };
 
+// ADDED: Memory data now includes comprehensive error and state info
 struct MemoryData {
     size_t memory_size_bytes;
     long long creation_timestamp;
     long backing_store_offset;
     std::vector<PageTableEntry> page_table;
+    
+    // --- Error handling members for 'screen -r' ---
     bool terminated_by_error = false;
     std::string termination_reason = "";
+    std::chrono::system_clock::time_point termination_time;
+    int invalid_address = -1;
     
+    // Mutex and CV for handling page faults cleanly
     std::mutex page_fault_mutex;
     std::condition_variable page_fault_cv;
 };
@@ -41,11 +50,10 @@ public:
     std::string processName;
     ProcessState state;
     
-    // --- ADDED: For scheduler logic and statistics ---
+    // Scheduler and statistics
     int arrival_time;
     int cpu_burst_time;
     int io_burst_time;
-    
     int remaining_burst_time;
     int io_remaining_time;
     int instructions_per_run;
@@ -54,29 +62,24 @@ public:
     int commands_executed_this_quantum = 0;
     std::vector<std::string> commands;
 
-    // --- ADDED: For timing ---
+    // Timing
     std::chrono::time_point<std::chrono::system_clock> start_time;
     std::chrono::time_point<std::chrono::system_clock> finish_time;
 
+    // Memory and variables
     MemoryData mem_data;
-    
-    // --- ADDED: A new constructor that takes a single integer ID ---
-    // This constructor matches the call std::make_shared<Process>(cpuClocks++)
-    Process(int id) 
-        : id(id), processName("P" + std::to_string(id)), state(ProcessState::NEW), 
+    std::unordered_map<std::string, uint16_t> variables; // ADDED: Symbol table for DECLARE, ADD etc.
+    std::vector<std::string> output_logs; // ADDED: To store logs for PRINT
+
+    // Constructor
+    Process(int id_val, const std::string& name = "") 
+        : id(id_val),
+          processName(name.empty() ? "P" + std::to_string(id_val) : name),
+          state(ProcessState::NEW), 
           arrival_time(0), cpu_burst_time(0), io_burst_time(0), 
-          remaining_burst_time(0), io_remaining_time(0), instructions_per_run(0) {}
-
-    // Default constructor
-    Process() : id(-1), processName(""), state(ProcessState::NEW), 
-                arrival_time(0), cpu_burst_time(0), remaining_burst_time(0),
-                io_burst_time(0), io_remaining_time(0), instructions_per_run(0) {}
-
-    // Existing constructor
-    Process(int id, const std::string& name, int arrival, int cpu_burst, int io_burst)
-        : id(id), processName(name), state(ProcessState::NEW), 
-          arrival_time(arrival), cpu_burst_time(cpu_burst), remaining_burst_time(cpu_burst),
-          io_burst_time(io_burst), io_remaining_time(io_burst), instructions_per_run(0) {}
+          remaining_burst_time(0), io_remaining_time(0), instructions_per_run(0) {
+        start_time = std::chrono::system_clock::now();
+    }
 };
 
 #endif // PROCESS_H

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <mutex>
 #include <condition_variable>
+#include <sstream> // For termination reason
 
 // --- Structs and Constants ---
 const std::string BACKING_STORE_FILE = "csopesy-backing-store.txt";
@@ -39,7 +40,7 @@ public:
           fcfs_ready_queue_ref(fcfs_ready), fcfs_running_processes_ref(fcfs_running) {
         
         main_memory_buffer = new char[MAX_OVERALL_MEM]();
-        int num_frames = MAX_OVERALL_MEM / MEM_PER_FRAME;
+        int num_frames = (MAX_OVERALL_MEM > 0 && MEM_PER_FRAME > 0) ? (MAX_OVERALL_MEM / MEM_PER_FRAME) : 0;
         frame_table.resize(num_frames);
         backing_store_stream.open(BACKING_STORE_FILE, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
     }
@@ -50,13 +51,15 @@ public:
     }
 
     int find_free_frame() {
-        for (int i = 0; i < frame_table.size(); ++i) {
+        for (size_t i = 0; i < frame_table.size(); ++i) {
             if (frame_table[i].is_free) { return i; }
         }
         return -1;
     }
 
-    int evict_page_oldest_process(std::atomic<int>& pages_paged_out_ref) {
+    int evict_page_lru(std::atomic<int>& pages_paged_out_ref) {
+        // A simple LRU approximation: evict a page from the oldest-running process
+        // A more accurate LRU would track last access time per page.
         Process* oldest_process_to_evict = nullptr;
         long long min_timestamp = -1;
 
@@ -81,9 +84,9 @@ public:
           find_oldest_in_list(fcfs_ready_queue_ref);
           find_oldest_in_list(fcfs_running_processes_ref); }
 
-        if (!oldest_process_to_evict) { return -1; }
+        if (!oldest_process_to_evict) { return -1; } // No page to evict
 
-        for (int i = 0; i < oldest_process_to_evict->mem_data.page_table.size(); ++i) {
+        for (size_t i = 0; i < oldest_process_to_evict->mem_data.page_table.size(); ++i) {
             auto& pte = oldest_process_to_evict->mem_data.page_table[i];
             if (pte.is_present) {
                 int victim_frame_index = pte.frame_index;
@@ -93,42 +96,42 @@ public:
                     backing_store_stream.seekp(oldest_process_to_evict->mem_data.backing_store_offset + (i * MEM_PER_FRAME));
                     backing_store_stream.write(page_data_ptr, MEM_PER_FRAME);
                     backing_store_stream.flush();
-                    pages_paged_out_ref++;
                 }
                 pte.is_present = false;
                 pte.is_dirty = false;
                 pte.frame_index = -1;
+                frame_table[victim_frame_index].is_free = true; // Mark frame as free
+                frame_table[victim_frame_index].owner_pid = -1;
+                pages_paged_out_ref++;
                 return victim_frame_index;
             }
         }
-        return -1;
+        return -1; // Should not be reached if process had pages
     }
-
-    // --- MODIFIED: handle_page_fault ---
+    
     void handle_page_fault(Process& faulting_process, int page_number, std::atomic<int>& paged_in_ref, std::atomic<int>& paged_out_ref) {
-        // Lock the mutex for this specific process to prevent it from running
         std::unique_lock<std::mutex> lock(faulting_process.mem_data.page_fault_mutex);
         
-        // Check again to see if another thread already handled the fault
         auto& pte = faulting_process.mem_data.page_table[page_number];
-        if (pte.is_present) {
+        if (pte.is_present) { // Check again in case another thread fixed it
             return;
         }
 
         int frame_idx = find_free_frame();
         if (frame_idx == -1) {
-            frame_idx = evict_page_oldest_process(paged_out_ref);
+            frame_idx = evict_page_lru(paged_out_ref);
         }
 
         if (frame_idx != -1) {
-            std::lock_guard<std::mutex> backing_lock(backing_store_mutex);
-            char* frame_ptr = main_memory_buffer + (frame_idx * MEM_PER_FRAME);
-            backing_store_stream.seekg(faulting_process.mem_data.backing_store_offset + (page_number * MEM_PER_FRAME));
-            backing_store_stream.read(frame_ptr, MEM_PER_FRAME);
-            
+            {
+                std::lock_guard<std::mutex> backing_lock(backing_store_mutex);
+                char* frame_ptr = main_memory_buffer + (frame_idx * MEM_PER_FRAME);
+                backing_store_stream.seekg(faulting_process.mem_data.backing_store_offset + (page_number * MEM_PER_FRAME));
+                backing_store_stream.read(frame_ptr, MEM_PER_FRAME);
+            }
             paged_in_ref++;
             
-            // Update the frame table and PTE
+            // Update frame table and PTE
             frame_table[frame_idx].is_free = false;
             frame_table[frame_idx].owner_pid = faulting_process.id;
             frame_table[frame_idx].page_number_in_process = page_number;
@@ -139,6 +142,10 @@ public:
             
             // Notify the blocked process that its page is ready
             faulting_process.mem_data.page_fault_cv.notify_one();
+        } else {
+             // CRITICAL: Could not find a frame. System is deadlocked on memory.
+             // This can happen if all memory is pinned by other blocked processes.
+             // The process will remain blocked.
         }
     }
 };
@@ -174,29 +181,29 @@ int MemoryManager::get_free_memory_bytes() {
 }
 
 void MemoryManager::allocate_for_process(Process& process, size_t requested_size) {
-    {
-        std::lock_guard<std::mutex> lock(g_cout_mutex);
-        std::cout << "\nDEBUG: [MemoryManager] Allocating " << requested_size << " bytes for process '" << process.processName << "'." << std::endl;
-    }
     process.mem_data.memory_size_bytes = requested_size;
     process.mem_data.creation_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    
+    // Ensure page table size is correct
     int num_pages = (requested_size + MEM_PER_FRAME - 1) / MEM_PER_FRAME;
     process.mem_data.page_table.resize(num_pages);
+    
+    // Allocate space in backing store
     {
         std::lock_guard<std::mutex> lock(p_impl->backing_store_mutex);
         process.mem_data.backing_store_offset = p_impl->next_backing_store_offset;
-        long new_file_end_position = p_impl->next_backing_store_offset + requested_size - 1;
-        if (new_file_end_position >= p_impl->next_backing_store_offset) {
-            p_impl->backing_store_stream.seekp(new_file_end_position);
-            p_impl->backing_store_stream.write("\0", 1); 
-        }
+        
+        // Write a null byte at the end of the allocated region to expand the file
+        p_impl->backing_store_stream.seekp(p_impl->next_backing_store_offset + requested_size - 1);
+        p_impl->backing_store_stream.write("\0", 1); 
         p_impl->backing_store_stream.flush();
+        
         p_impl->next_backing_store_offset += requested_size;
     }
 }
 
 void MemoryManager::deallocate_for_process(Process& process) {
-    for (int i = 0; i < p_impl->frame_table.size(); ++i) {
+    for (size_t i = 0; i < p_impl->frame_table.size(); ++i) {
         if (p_impl->frame_table[i].owner_pid == process.id) {
             p_impl->frame_table[i].is_free = true;
             p_impl->frame_table[i].owner_pid = -1;
@@ -205,31 +212,31 @@ void MemoryManager::deallocate_for_process(Process& process) {
     }
 }
 
-// --- MODIFIED: access_memory ---
+// MODIFIED: access_memory now populates error info correctly.
 char* MemoryManager::access_memory(Process& process, int logical_address, bool is_write) {
-    if (logical_address < 0 || logical_address >= process.mem_data.memory_size_bytes) {
+    if (logical_address < 0 || (size_t)logical_address >= process.mem_data.memory_size_bytes) {
+        // --- CRITICAL FIX: Populate all error fields ---
+        process.state = ProcessState::TERMINATED;
         process.mem_data.terminated_by_error = true;
-        process.mem_data.termination_reason = "Memory access violation at address " + std::to_string(logical_address);
-        return nullptr;
+        process.mem_data.termination_time = std::chrono::system_clock::now();
+        process.mem_data.invalid_address = logical_address;
+        
+        std::stringstream ss;
+        ss << "Memory access violation at address 0x" << std::hex << logical_address;
+        process.mem_data.termination_reason = ss.str();
+        
+        return nullptr; // Signal fatal error
     }
+
     int page_number = logical_address / MEM_PER_FRAME;
     int offset = logical_address % MEM_PER_FRAME;
     auto& pte = process.mem_data.page_table[page_number];
 
     if (!pte.is_present) {
-        process.state = ProcessState::BLOCKED;
-        
-        // This is a blocking call. The thread will wait here until the page is loaded.
-        p_impl->handle_page_fault(process, page_number, this->pages_paged_in, this->pages_paged_out);
-
-        // Wait for the page to be loaded.
-        std::unique_lock<std::mutex> lock(process.mem_data.page_fault_mutex);
-        while (!pte.is_present) {
-             process.mem_data.page_fault_cv.wait(lock);
-        }
-
-        // The page is now present. The instruction needs to be re-attempted.
-        // Return nullptr to signal the scheduler to put the process back in the ready queue.
+        // Signal a page fault by returning nullptr. The worker thread will handle blocking.
+        // Asynchronously trigger the page fault handler.
+        std::thread page_fault_thread(&MemoryManagerImpl::handle_page_fault, p_impl, std::ref(process), page_number, std::ref(this->pages_paged_in), std::ref(this->pages_paged_out));
+        page_fault_thread.detach(); // Fire and forget
         return nullptr;
     }
 

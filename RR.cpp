@@ -7,83 +7,41 @@
 #include <map> 
 #include <algorithm>
 #include <thread>
+#include <cstdint>
 
 // --- Central Headers ---
 #include "global.h" 
 #include "RR.h"      
-#include "config.h"  
 #include "vmstat.h"  
 
 // --- File-local variables ---
-int memoryCycle = 0;
 std::random_device rr_rd;
 std::mt19937 rr_gen(rr_rd());
 
 // --- Forward Declarations for functions defined in this file ---
 void rr_scheduler_thread_func();
 void rr_core_worker_func(int core_id);
+uint16_t parse_value_or_variable(const std::string& token, Process& process);
 
-// --- Helper Function to Format Time ---
-std::string rr_format_time(const std::chrono::system_clock::time_point& tp, const std::string& fmt) {
-    auto t = std::chrono::system_clock::to_time_t(tp);
-    auto tm = *std::localtime(&t);
-    std::stringstream ss;
-    ss << std::put_time(&tm, fmt.c_str());
-    return ss.str();
-} 
-
-// --- Helper Function to Get Process Names ---
-std::vector<std::string> rr_getRunningProcessNames() {
-    std::lock_guard<std::mutex> lock(rr_g_process_mutex); 
-    std::vector<std::string> out; 
-    for (const auto& p : rr_g_running_processes) {
-        if (p) out.emplace_back(p->processName);
-    } 
-    return out;
-}
-
-// --- Helper for Memory Logging ---
-void display_memory() {
-    std::ostringstream filename;
-    filename << "memory_stamp_" << memoryCycle++ << ".txt";
-    std::ofstream memory_file(filename.str());
-    auto frame_snapshot = memory_manager->get_frame_snapshot();
-    int occupied_frames = 0;
-    for(const auto& frame : frame_snapshot) {
-        if (!frame.is_free) { occupied_frames++; }
+// --- The Main Scheduler Entry Point ---
+int RR() {
+    rr_g_is_running = true;
+    
+    std::thread scheduler(rr_scheduler_thread_func);
+    std::vector<std::thread> core_workers;
+    for (int i = 0; i < CPU_COUNT; ++i) {
+        core_workers.emplace_back(rr_core_worker_func, i);
     }
-    memory_file << "Timestamp: (" << rr_format_time(std::chrono::system_clock::now(), "%m/%d/%Y %I:%M:%S%p") << ")" << std::endl;
-    memory_file << "Total Frames: " << frame_snapshot.size() << std::endl;
-    memory_file << "Occupied Frames: " << occupied_frames << std::endl;
-    memory_file << "Unused Frames: " << frame_snapshot.size() - occupied_frames << std::endl << std::endl;
-    memory_file << "---- Memory Layout (Top to Bottom) ----" << std::endl;
-    memory_file << "----end---- = " << MAX_OVERALL_MEM << std::endl;
-    std::map<int, std::string> pid_to_name_map;
-    {
-        std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-        auto populate_map = [&](const auto& process_list){
-            for(const auto& p : process_list) { if(p) pid_to_name_map[p->id] = p->processName; }
-        };
-        populate_map(rr_g_ready_queue);
-        populate_map(rr_g_running_processes);
-        populate_map(rr_g_blocked_queue);
-        populate_map(rr_g_finished_processes);
-    }
-    for (int i = frame_snapshot.size() - 1; i >= 0; --i) {
-        const auto& frame = frame_snapshot[i];
-        long long upper_bound = (long long)(i + 1) * MEM_PER_FRAME;
-        long long lower_bound = (long long)i * MEM_PER_FRAME;
-        memory_file << upper_bound << std::endl;
-        if (frame.is_free) { memory_file << "[  FREE  ]" << std::endl; } 
-        else {
-            std::string name = "PID " + std::to_string(frame.owner_pid);
-            if(pid_to_name_map.count(frame.owner_pid)) { name = pid_to_name_map[frame.owner_pid]; }
-            memory_file << name << std::endl;
+    
+    // Wait for shutdown signal
+    scheduler.join();
+    for (auto& worker : core_workers) {
+        if (worker.joinable()) {
+            worker.join();
         }
-        memory_file << lower_bound << std::endl << std::endl;
     }
-    memory_file << "----start---- = 0" << std::endl;
-    memory_file.close();
+    
+    return 0;
 }
 
 // --- The Scheduler Thread ---
@@ -104,29 +62,39 @@ void rr_scheduler_thread_func() {
             ProcessCreationRequest request = g_creation_queue.front();
             g_creation_queue.pop_front();
             
-            std::shared_ptr<Process> pcb = std::make_shared<Process>(cpuClocks++);
-            pcb->start_time = std::chrono::system_clock::now();
-            pcb->processName = request.name;
+            lock.unlock(); // Unlock while creating process to reduce lock contention
             
+            std::shared_ptr<Process> pcb = std::make_shared<Process>(cpuClocks++, request.name);
             memory_manager->allocate_for_process(*pcb, request.memory_size);
 
-            if (request.memory_size > 2) {
-                // Give processes a heavy workload to force preemption
-                for (int i = 0; i < 50; ++i) { 
-                    pcb->commands.push_back("write 0x0 123"); 
-                    pcb->commands.push_back("read 0x0");
+            if (request.commands.empty()) {
+                // Generate random commands if none provided
+                std::uniform_int_distribution<> instr_dist(MIN_INS, MAX_INS);
+                int num_instr = instr_dist(rr_gen);
+                for (int i = 0; i < num_instr; ++i) {
+                     pcb->commands.push_back("READ 0x0"); // Simple default workload
                 }
+            } else {
+                pcb->commands = request.commands;
             }
-
-            rr_g_ready_queue.push_back(pcb); 
+            
+            lock.lock();
+            rr_g_ready_queue.push_back(pcb);
+            {
+                std::lock_guard<std::mutex> map_lock(g_process_map_mutex);
+                g_process_map[pcb->processName] = pcb;
+            }
         }
 
-        // Priority 2: Unblock processes
-        while (!rr_g_blocked_queue.empty()) {
-            std::shared_ptr<Process> unblocked_process = rr_g_blocked_queue.front();
-            rr_g_blocked_queue.pop_front();
-            unblocked_process->state = ProcessState::READY;
-            rr_g_ready_queue.push_back(unblocked_process);
+        // Priority 2: Unblock processes whose page faults have been resolved
+        auto it = rr_g_blocked_queue.begin();
+        while (it != rr_g_blocked_queue.end()) {
+            auto& process = *it;
+            // A simple check if it's still blocked (a real OS would get a signal)
+            // Here, we just move it back to ready. The worker will retry the instruction.
+            process->state = ProcessState::READY;
+            rr_g_ready_queue.push_back(process);
+            it = rr_g_blocked_queue.erase(it);
         }
 
         // Priority 3: Assign ready processes to cores
@@ -143,29 +111,29 @@ void rr_scheduler_thread_func() {
     }
 }
 
-// --- The CPU Worker Thread (Correct, Deadlock-Free Version) ---
-// --- FINAL, CORRECT, DEADLOCK-FREE WORKER THREAD ---
+
+// --- CPU Worker Thread (REWRITTEN FOR CORRECTNESS) ---
 void rr_core_worker_func(int core_id) {
     while (rr_g_is_running) {
         std::shared_ptr<Process> my_process;
 
-        // Step 1: Briefly lock ONLY to get a pointer to the process.
-        {
+        { // Briefly lock to get a process
             std::lock_guard<std::mutex> lock(rr_g_process_mutex);
             my_process = rr_g_running_processes[core_id];
         }
 
-        // If no process, idle and loop again.
         if (!my_process) {
             vmstats_increment_idle_ticks();
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20)); // Don't busy-wait
             continue;
         }
 
-        // Step 2: Failsafe check for already finished process.
-        if (my_process->program_counter >= my_process->commands.size()) {
-            {
+        // Check if process is finished or terminated
+        if (my_process->program_counter >= my_process->commands.size() || my_process->state == ProcessState::TERMINATED) {
+             {
                 std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+                my_process->state = (my_process->state == ProcessState::TERMINATED) ? ProcessState::TERMINATED : ProcessState::FINISHED;
+                if(my_process->state == ProcessState::FINISHED) my_process->finish_time = std::chrono::system_clock::now();
                 rr_g_finished_processes.push_back(my_process);
                 rr_g_running_processes[core_id] = nullptr;
                 memory_manager->deallocate_for_process(*my_process);
@@ -174,36 +142,37 @@ void rr_core_worker_func(int core_id) {
             continue;
         }
 
-        // Step 3: Execute one instruction. This happens OUTSIDE the main lock.
+        // --- INSTRUCTION EXECUTION CYCLE ---
+        bool instruction_succeeded = false;
         const std::string& command_str = my_process->commands[my_process->program_counter];
         std::istringstream iss(command_str);
-        std::string command_token;
-        iss >> command_token;
-        bool success = true;
-
-        if (command_token == "read" || command_token == "write") {
-            int address;
-            iss >> std::hex >> address;
-            bool is_write = (command_token == "write");
+        std::string command;
+        iss >> command;
+        
+        // Command implementations
+        if (command == "READ" || command == "WRITE") {
+            std::string var_name, addr_str;
+            iss >> (command == "READ" ? var_name : addr_str);
             
-            // Memory access is a slow operation, so it's critical it happens without holding the process lock.
+            int address;
+            if (command == "WRITE") iss >> var_name; // WRITE addr var
+
+            try {
+                address = std::stoi(addr_str, nullptr, 16);
+            } catch(...) {
+                address = -1; // Invalid address format
+            }
+            
+            bool is_write = (command == "WRITE");
             char* physical_ptr = memory_manager->access_memory(*my_process, address, is_write);
 
-            if (my_process->mem_data.terminated_by_error) {
-                success = false;
-                // Lock cout, print, then lock process list to terminate.
-                { std::lock_guard<std::mutex> lock(g_cout_mutex); std::cout << "\nProcess " << my_process->processName << " terminated: " << my_process->mem_data.termination_reason << std::endl; }
-                {
-                    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-                    my_process->state = ProcessState::FINISHED;
-                    rr_g_finished_processes.push_back(my_process);
-                    rr_g_running_processes[core_id] = nullptr;
-                    memory_manager->deallocate_for_process(*my_process);
-                    rr_g_scheduler_cv.notify_one();
-                }
-            } else if (physical_ptr == nullptr) {
-                success = false;
-                // Lock process list to block the process.
+            if (my_process->state == ProcessState::TERMINATED) {
+                // Fatal memory error handled inside access_memory
+                continue; // Loop will pick up terminated state
+            }
+            
+            if (physical_ptr == nullptr) {
+                // PAGE FAULT: Block the process, DO NOT advance PC
                 {
                     std::lock_guard<std::mutex> lock(rr_g_process_mutex);
                     my_process->state = ProcessState::BLOCKED;
@@ -212,26 +181,65 @@ void rr_core_worker_func(int core_id) {
                     rr_g_scheduler_cv.notify_one();
                 }
             } else {
+                // SUCCESS
                 if (is_write) {
-                    int value; iss >> value;
-                    *(reinterpret_cast<uint16_t*>(physical_ptr)) = static_cast<uint16_t>(value);
+                    uint16_t val = parse_value_or_variable(var_name, *my_process);
+                    *(reinterpret_cast<uint16_t*>(physical_ptr)) = val;
+                } else { // READ
+                    uint16_t val = *(reinterpret_cast<uint16_t*>(physical_ptr));
+                    my_process->variables[var_name] = val;
                 }
-                vmstats_increment_active_ticks();
+                instruction_succeeded = true;
             }
-        } else {
-            vmstats_increment_active_ticks();
+        } 
+        else if (command == "DECLARE") {
+            std::string var_name, val_str;
+            iss >> var_name >> val_str;
+            my_process->variables[var_name] = static_cast<uint16_t>(std::stoi(val_str));
+            instruction_succeeded = true;
         }
+        else if (command == "ADD" || command == "SUBTRACT") {
+            std::string dest_var, src1_str, src2_str;
+            iss >> dest_var >> src1_str >> src2_str;
+            uint16_t val1 = parse_value_or_variable(src1_str, *my_process);
+            uint16_t val2 = parse_value_or_variable(src2_str, *my_process);
+            my_process->variables[dest_var] = (command == "ADD") ? (val1 + val2) : (val1 - val2);
+            instruction_succeeded = true;
+        }
+        else if (command == "PRINT") {
+             std::string full_arg = command_str.substr(command_str.find('(') + 1);
+             full_arg = full_arg.substr(0, full_arg.find_last_of(')'));
+             // Very basic parsing for "string" + var
+             std::string literal = full_arg.substr(0, full_arg.find('+'));
+             literal = literal.substr(literal.find('"') + 1, literal.find_last_of('"') - 1);
+             std::string var_name = full_arg.substr(full_arg.find('+') + 1);
+             var_name.erase(0, var_name.find_first_not_of(" "));
 
-        // Step 4: If instruction was successful, update counters and check for end-of-quantum or completion.
-        if (success) {
+             uint16_t val = my_process->variables[var_name];
+             my_process->output_logs.push_back(literal + std::to_string(val));
+             instruction_succeeded = true;
+        }
+        // ... Other commands like SLEEP, FOR would go here ...
+        else {
+            // Unrecognized command, treat as a NOP (No Operation)
+            instruction_succeeded = true;
+        }
+        
+
+        // --- UPDATE PC AND CHECK QUANTUM (only on success) ---
+        if (instruction_succeeded) {
+            vmstats_increment_active_ticks();
             my_process->program_counter++;
             my_process->commands_executed_this_quantum++;
+
+            if (delayPerExec > 0) {
+                 std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
+            }
 
             bool is_finished = (my_process->program_counter >= my_process->commands.size());
             bool quantum_expired = (my_process->commands_executed_this_quantum >= qCycles);
 
             if (is_finished || quantum_expired) {
-                // Now, briefly lock ONLY to update the process lists.
                 std::lock_guard<std::mutex> lock(rr_g_process_mutex);
                 if (is_finished) {
                     my_process->state = ProcessState::FINISHED;
@@ -249,82 +257,36 @@ void rr_core_worker_func(int core_id) {
     }
 }
 
-// --- UI Functions ---
-void rr_display_processes() {
-    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-    std::cout << "\n-------------------------------------------------------------\n";
-    std::cout << "\nRunning processes:\n";
-    for (const auto& p : rr_g_running_processes) {
-        if (p) {
-            std::cout << "  " << p->processName << " (ID: " << p->id << ")\n";
-        }
+// --- Helper to parse a token as either a literal number or a variable name ---
+uint16_t parse_value_or_variable(const std::string& token, Process& process) {
+    if (process.variables.count(token)) {
+        return process.variables[token];
     }
-    std::cout << "\nFinished processes:\n";
-    for (const auto& p : rr_g_finished_processes) {
-        if (p) {
-            std::cout << "  " << p->processName << " (ID: " << p->id << ")\n";
-        }
+    try {
+        return static_cast<uint16_t>(std::stoi(token));
+    } catch (...) {
+        return 0; // Default to 0 if not a valid number or variable
     }
-    std::cout << "-------------------------------------------------------------\n\n";
 }
 
-void rr_write_processes() {
-    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-    std::ofstream outfile("csopesy-log.txt", std::ios::app);
-    outfile << "--- RR SCHEDULER REPORT ---\n";
-    outfile << "Running processes:\n";
-    for (const auto& p : rr_g_running_processes) {
-        if (p) outfile << "  " << p->processName << "\n";
-    }
-    outfile << "Finished processes:\n";
-    for (const auto& p : rr_g_finished_processes) {
-        if (p) outfile << "  " << p->processName << "\n";
-    }
-    outfile.close();
-}
-
-// --- The Process Generator for 'scheduler-start' ---
+// --- Persistent Process Generator for 'scheduler-start' ---
 void rr_create_processes(MemoryManager& mm) {
-    process_maker_running = true;
-    while (process_maker_running) {
-        {
-            std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-            g_creation_queue.push_back({"process" + std::to_string(cpuClocks++), 256});
+    while (!g_is_shutting_down) {
+        if (process_maker_running) {
+            {
+                std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+                std::string name = "process" + std::to_string(cpuClocks.load());
+                // Use a random value within the configured range for memory
+                std::uniform_int_distribution<> mem_dist(MIN_MEM_PER_PROC, MAX_MEM_PER_PROC);
+                size_t mem_size = mem_dist(rr_gen);
+
+                g_creation_queue.push_back({name, mem_size, {}}); // Empty commands for random generation
+            }
+            rr_g_scheduler_cv.notify_one(); // Wake up scheduler
+            std::this_thread::sleep_for(std::chrono::milliseconds(processFrequency));
+        } else {
+            // Sleep to prevent busy-waiting when generator is stopped
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
-        rr_g_scheduler_cv.notify_one();
-        std::this_thread::sleep_for(std::chrono::milliseconds(processFrequency));
     }
-
-    // --- Shutdown Logic ---
-    while (true) {
-        bool all_done;
-        {
-            std::lock_guard<std::mutex> lock(rr_g_process_mutex);
-            bool running_is_empty = std::all_of(rr_g_running_processes.begin(), rr_g_running_processes.end(), [](const auto& p){ return p == nullptr; });
-            all_done = g_creation_queue.empty() && rr_g_ready_queue.empty() && rr_g_blocked_queue.empty() && running_is_empty;
-        }
-        if (all_done) break;
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-
-    rr_g_is_running = false;
-    rr_g_scheduler_cv.notify_all();
-}
-
-// --- The Main Scheduler Entry Point ---
-int RR() {
-    rr_g_is_running = true;
-    
-    std::thread scheduler(rr_scheduler_thread_func);
-    std::vector<std::thread> core_workers;
-    for (int i = 0; i < CPU_COUNT; ++i) {
-        core_workers.emplace_back(rr_core_worker_func, i);
-    }
-    
-    scheduler.join();
-    for (auto& worker : core_workers) {
-        worker.join();
-    }
-    
-    return 0;
 }

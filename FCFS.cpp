@@ -162,8 +162,100 @@ void fcfs_core_worker_func(int core_id) {
 }
 
 // --- UI Functions ---
-void fcfs_display_processes() { /* Your existing display logic is fine */ }
-void fcfs_write_processes() { /* Your existing write logic is fine */ }
+// In FCFS.cpp
+
+// --- UI Functions ---
+void fcfs_display_processes() {
+    // Lock the mutex for a consistent snapshot.
+    std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+    
+    // --- NEW: Calculate CPU Utilization ---
+    int busyCores = 0;
+    for (const auto& p : fcfs_g_running_processes) {
+        if (p != nullptr) {
+            busyCores++;
+        }
+    }
+    int cpuUtil = CPU_COUNT > 0 ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
+
+    // --- Display the output ---
+    std::cout << "\n-------------------------------------------------------------\n";
+    
+    // Print the new CPU utilization line.
+    std::cout << "CPU Utilization: " << cpuUtil << "%" << std::endl;
+
+    // The rest of your original display logic remains.
+    std::cout << "\nRunning processes:\n";
+    for (const auto& p : fcfs_g_running_processes) {
+        if (p) {
+            // Updated to use your original, more detailed format
+            std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                      << " (" << fcfs_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                      << "\tCore: " << p->assigned_core
+                      << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+
+    std::cout << "\nFinished processes:\n";
+    for (const auto& p : fcfs_g_finished_processes) {
+        // Updated to use your original, more detailed format
+        std::cout << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                  << " (" << fcfs_format_time(p->finish_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                  << "\tFinished"
+                  << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+    }
+    std::cout << "-------------------------------------------------------------\n\n";
+}
+
+void fcfs_write_processes() {
+    // Lock the mutex to get a consistent snapshot of the process lists.
+    std::lock_guard<std::mutex> lock(fcfs_g_process_mutex);
+    
+    // Open the log file in append mode.
+    std::ofstream outfile("csopesy-log.txt", std::ios::app); 
+    
+    if (!outfile.is_open()) {
+        // Use cerr for errors, as it's unbuffered.
+        std::cerr << "Error: Unable to open file csopesy-log.txt for writing." << std::endl;
+        return;
+    }
+
+    outfile << "\n--------------------- FCFS REPORT ---------------------\n";
+
+    // --- NEW: Calculate CPU Utilization (same as the display function) ---
+    int busyCores = 0;
+    for (const auto& p : fcfs_g_running_processes) {
+        if (p != nullptr) {
+            busyCores++;
+        }
+    }
+    int cpuUtil = CPU_COUNT > 0 ? static_cast<int>(100.0 * busyCores / CPU_COUNT) : 0;
+    outfile << "CPU Utilization: " << cpuUtil << "%" << std::endl;
+
+    // --- Print the lists (using your original detailed format) ---
+    outfile << "\nRunning processes:\n";
+    for (const auto& p : fcfs_g_running_processes) {
+        if (p) {
+            outfile << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                    << " (" << fcfs_format_time(p->start_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                    << "\tCore: " << p->assigned_core
+                    << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+
+    outfile << "\nFinished processes:\n";
+    for (const auto& p : fcfs_g_finished_processes) {
+        if (p) {
+            outfile << "process" << (p->id < 10 ? "0" : "") << std::to_string(p->id)
+                    << " (" << fcfs_format_time(p->finish_time, "%m/%d/%Y %I:%M:%S%p") << ")"
+                    << "\tFinished"
+                    << "\t" << p->program_counter << " / " << p->commands.size() << std::endl;
+        }
+    }
+    outfile << "-------------------------------------------------------------\n\n";
+    
+    outfile.close();
+}
 
 // --- The Process Generator for 'scheduler-start' ---
 // CORRECTION: This now adds requests to the shared queue.
