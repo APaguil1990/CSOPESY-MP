@@ -86,6 +86,49 @@ void display_memory() {
     memory_file.close();
 }
 
+void rr_search_process(std::string process_search) {
+    std::lock_guard<std::mutex> lock(rr_g_process_mutex);
+    std::stringstream tempString;
+    std::vector<std::shared_ptr<Process>> search_vector;
+    std::shared_ptr<Process> process = nullptr;
+
+    std::cout << "\n-------------------------------------------------------------\n";
+
+    if (!rr_g_ready_queue.empty() || rr_g_running_processes.front() != nullptr) {
+        search_vector.insert(search_vector.end(), rr_g_ready_queue.begin(), rr_g_ready_queue.end());
+        search_vector.insert(search_vector.end(), rr_g_running_processes.begin(), rr_g_running_processes.end());
+
+        std::cout << "process search start" << std::endl;
+        for (const auto& p : search_vector) {
+            int i = 0;
+            if (process_search.compare(p->processName) == 0) {
+                process = p;
+                std::cout << "process found" << std::endl;
+                break;
+            }
+            i++;
+            if (i < search_vector.size()) {
+                break;
+            }
+        }
+        std::cout << "process search end" << std::endl;
+
+        if (process != nullptr) {
+            for(const std::string& line : process->commands) {
+                std::cout << line << std::endl;
+            }
+        } else {
+            std::cout << "Process not found" << std::endl;
+        }
+        
+        std::cout << "\n-------------------------------------------------------------\n";
+
+    } else {
+        std::cout << "Currently no processes running or waiting to run";
+    }
+}  
+
+
 // --- The Scheduler Thread ---
 void rr_scheduler_thread_func() {
     while (rr_g_is_running) {
